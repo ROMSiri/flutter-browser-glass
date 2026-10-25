@@ -24,6 +24,7 @@ class WebViewModel extends ChangeNotifier {
   FindInteractionController? findInteractionController;
   Uint8List? screenshot;
   bool needsToCompleteInitialLoad;
+  bool isPinned;
   final DateTime _createdTime;
   DateTime _lastOpenedTime;
 
@@ -49,11 +50,13 @@ class WebViewModel extends ChangeNotifier {
       this.webViewController,
       this.pullToRefreshController,
       this.findInteractionController,
-      this.needsToCompleteInitialLoad = true})
+      this.needsToCompleteInitialLoad = true,
+      this.isPinned = false})
       : _createdTime = createdTime ?? DateTime.now(),
         _lastOpenedTime = lastOpenedTime ?? DateTime.now(),
         _tabIndex = tabIndex,
         _url = url,
+        _title = title,
         _favicon = favicon,
         _progress = progress,
         _loaded = loaded,
@@ -212,6 +215,7 @@ class WebViewModel extends ChangeNotifier {
     loaded = webViewModel.loaded;
     isDesktopMode = webViewModel.isDesktopMode;
     isIncognitoMode = webViewModel.isIncognitoMode;
+    isPinned = webViewModel.isPinned;
     setJavaScriptConsoleResults(
         webViewModel._javaScriptConsoleResults.toList());
     setJavaScriptConsoleHistory(
@@ -241,6 +245,7 @@ class WebViewModel extends ChangeNotifier {
             progress: map["progress"],
             isDesktopMode: map["isDesktopMode"],
             isIncognitoMode: map["isIncognitoMode"],
+            isPinned: map["isPinned"] ?? false,
             javaScriptConsoleHistory:
                 map["javaScriptConsoleHistory"]?.cast<String>(),
             isSecure: map["isSecure"],
@@ -264,10 +269,10 @@ class WebViewModel extends ChangeNotifier {
       "progress": _progress,
       "isDesktopMode": _isDesktopMode,
       "isIncognitoMode": _isIncognitoMode,
+      "isPinned": isPinned,
       "javaScriptConsoleHistory": _javaScriptConsoleHistory,
       "isSecure": _isSecure,
       "settings": settings?.toMap(),
-      "screenshot": screenshot,
       "createdTime": _createdTime.toIso8601String(),
       "lastOpenedTime": _lastOpenedTime.toIso8601String(),
     };

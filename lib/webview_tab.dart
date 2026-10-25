@@ -12,7 +12,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'glass/glass_bar_controller.dart';
 import 'glass/glass_theme.dart';
-import 'javascript_console_result.dart';
 import 'long_press_alert_dialog.dart';
 import 'models/browser_model.dart';
 import 'models/window_model.dart';
@@ -149,10 +148,11 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
   }
 
   InAppWebView _buildWebView() {
-    var browserModel = Provider.of<BrowserModel>(context, listen: true);
-    var windowModel = Provider.of<WindowModel>(context, listen: true);
+    // без подписки: иначе WebView перестраивается на каждый процент загрузки
+    var browserModel = Provider.of<BrowserModel>(context, listen: false);
+    var windowModel = Provider.of<WindowModel>(context, listen: false);
     var settings = browserModel.getSettings();
-    var currentWebViewModel = Provider.of<WebViewModel>(context, listen: true);
+    var currentWebViewModel = Provider.of<WebViewModel>(context, listen: false);
 
     if (Util.isAndroid()) {
       InAppWebViewController.setWebContentsDebuggingEnabled(
@@ -162,7 +162,7 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
     var initialSettings = widget.webViewModel.settings!;
     initialSettings.isInspectable = settings.debuggingEnabled;
     initialSettings.useOnDownloadStart = true;
-    initialSettings.useOnLoadResource = true;
+    initialSettings.useOnLoadResource = false;
     initialSettings.useShouldOverrideUrlLoading = true;
     initialSettings.javaScriptCanOpenWindowsAutomatically = true;
     if (Util.isIOS() || Util.isAndroid()) {
@@ -341,44 +341,8 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
           }
         }
       },
-      onConsoleMessage: (controller, consoleMessage) {
-        Color consoleTextColor = Colors.black;
-        Color consoleBackgroundColor = Colors.transparent;
-        IconData? consoleIconData;
-        Color? consoleIconColor;
-        if (consoleMessage.messageLevel == ConsoleMessageLevel.ERROR) {
-          consoleTextColor = Colors.red;
-          consoleIconData = Icons.report_problem;
-          consoleIconColor = Colors.red;
-        } else if (consoleMessage.messageLevel == ConsoleMessageLevel.TIP) {
-          consoleTextColor = Colors.blue;
-          consoleIconData = Icons.info;
-          consoleIconColor = Colors.blueAccent;
-        } else if (consoleMessage.messageLevel == ConsoleMessageLevel.WARNING) {
-          consoleBackgroundColor = const Color.fromRGBO(255, 251, 227, 1);
-          consoleIconData = Icons.report_problem;
-          consoleIconColor = Colors.orangeAccent;
-        }
-
-        widget.webViewModel.addJavaScriptConsoleResults(JavaScriptConsoleResult(
-          data: consoleMessage.message,
-          textColor: consoleTextColor,
-          backgroundColor: consoleBackgroundColor,
-          iconData: consoleIconData,
-          iconColor: consoleIconColor,
-        ));
-
-        if (isCurrentTab(currentWebViewModel)) {
-          currentWebViewModel.updateWithValue(widget.webViewModel);
-        }
-      },
-      onLoadResource: (controller, resource) {
-        widget.webViewModel.addLoadedResources(resource);
-
-        if (isCurrentTab(currentWebViewModel)) {
-          currentWebViewModel.updateWithValue(widget.webViewModel);
-        }
-      },
+      // консоль и список ресурсов были нужны только разделу «Для разработчиков»;
+      // их сбор на каждый запрос перестраивал интерфейс и тормозил панель
       shouldOverrideUrlLoading: (controller, navigationAction) async {
         var url = navigationAction.request.url;
 

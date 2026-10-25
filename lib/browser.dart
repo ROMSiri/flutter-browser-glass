@@ -71,8 +71,21 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
     if (!_isRestored) {
       _isRestored = true;
       restore();
+      _listenForSave();
     }
     precacheImage(const AssetImage("assets/icon/icon.png"), context);
+  }
+
+  // Подписки на сохранение — один раз. Раньше они добавлялись при каждой
+  // перестройке экрана, и каждое изменение страницы сохранялось десятки раз.
+  void _listenForSave() {
+    final browserModel = Provider.of<BrowserModel>(context, listen: false);
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    final currentWebViewModel =
+        Provider.of<WebViewModel>(context, listen: false);
+    browserModel.addListener(browserModel.save);
+    windowModel.addListener(windowModel.saveInfo);
+    currentWebViewModel.addListener(windowModel.saveInfo);
   }
 
   @override
@@ -81,44 +94,29 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildBrowser() {
-    final currentWebViewModel = Provider.of<WebViewModel>(context, listen: true);
     final browserModel = Provider.of<BrowserModel>(context, listen: true);
     final windowModel = Provider.of<WindowModel>(context, listen: true);
 
-    browserModel.addListener(() {
-      browserModel.save();
-    });
-    windowModel.addListener(() {
-      windowModel.saveInfo();
-    });
-    currentWebViewModel.addListener(() {
-      windowModel.saveInfo();
-    });
-
     var canShowTabScroller =
         browserModel.showTabScroller && windowModel.webViewTabs.isNotEmpty;
+
+    if (Util.isMobile()) {
+      // экран вкладок ложится поверх страницы: страница под ним остаётся живой,
+      // и он может плавно «вырасти» из неё и обратно в неё «раскрыться»
+      return Stack(
+        children: [
+          Positioned.fill(child: _buildWebViewTabs()),
+          if (canShowTabScroller) Positioned.fill(child: GlassTabsPage()),
+        ],
+      );
+    }
 
     return IndexedStack(
       index: canShowTabScroller ? 1 : 0,
       children: [
         _buildWebViewTabs(),
-        canShowTabScroller
-            ? (Util.isMobile()
-                ? _buildGlassTabsViewer()
-                : _buildWebViewTabsViewer())
-            : Container()
+        canShowTabScroller ? _buildWebViewTabsViewer() : Container()
       ],
-    );
-  }
-
-  Widget _buildGlassTabsViewer() {
-    final browserModel = Provider.of<BrowserModel>(context, listen: false);
-    return WillPopScope(
-      onWillPop: () async {
-        browserModel.showTabScroller = false;
-        return false;
-      },
-      child: const GlassTabsPage(),
     );
   }
 
@@ -134,6 +132,8 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
       ),
       child: Scaffold(
         backgroundColor: GlassColors.of(context).page,
+        // клавиатура ложится поверх страницы и не сжимает её
+        resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
             Positioned.fill(
@@ -161,6 +161,12 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
   Widget _buildWebViewTabs() {
     return WillPopScope(
         onWillPop: () async {
+          // открыт экран вкладок — «назад» плавно возвращает в текущую вкладку
+          final tabsPage = glassTabsPageKey.currentState;
+          if (tabsPage != null) {
+            tabsPage.closeToCurrent();
+            return false;
+          }
           if (_isFindingOnPage) {
             setState(() => _isFindingOnPage = false);
             return false;

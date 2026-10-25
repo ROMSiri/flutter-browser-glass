@@ -163,15 +163,17 @@ class GlassEmpty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = GlassColors.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 40, color: c.muted),
-          const SizedBox(height: 10),
-          Text(text, style: TextStyle(color: c.muted, fontSize: 15)),
-        ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 40, color: c.muted),
+            const SizedBox(height: 10),
+            Text(text, style: TextStyle(color: c.muted, fontSize: 15)),
+          ],
+        ),
       ),
     );
   }

@@ -11,7 +11,6 @@ import 'package:flutter_browser/models/favorite_model.dart';
 import 'package:flutter_browser/models/web_archive_model.dart';
 import 'package:flutter_browser/models/webview_model.dart';
 import 'package:flutter_browser/models/window_model.dart';
-import 'package:flutter_browser/pages/developers/main.dart';
 import 'package:flutter_browser/pages/settings/main.dart';
 import 'package:flutter_browser/util.dart';
 import 'package:flutter_browser/webview_tab.dart';
@@ -21,6 +20,8 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'glass_bar_controller.dart';
+import 'glass.dart';
+import 'glass_page.dart';
 import 'glass_sheet.dart';
 import 'glass_theme.dart';
 
@@ -87,12 +88,61 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
     ));
   }
 
+  /// Закрыть все вкладки, кроме закреплённых.
   void closeAllTabs() {
     final browserModel = Provider.of<BrowserModel>(context, listen: false);
     final windowModel = Provider.of<WindowModel>(context, listen: false);
-    browserModel.showTabScroller = false;
-    windowModel.closeAllTabs();
+    final pinned = windowModel.webViewTabs.any((t) => t.webViewModel.isPinned);
+    if (pinned) {
+      closeOtherTabs(null);
+    } else {
+      windowModel.closeAllTabs();
+    }
+    if (windowModel.webViewTabs.isEmpty) browserModel.showTabScroller = false;
     GlassBarController.instance.reset();
+  }
+
+  /// Закрыть все вкладки, кроме [keep] и закреплённых.
+  void closeOtherTabs(WebViewModel? keep) {
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    final tabs = windowModel.webViewTabs.toList();
+    for (var i = tabs.length - 1; i >= 0; i--) {
+      final model = tabs[i].webViewModel;
+      if (model == keep || model.isPinned) continue;
+      windowModel.closeTab(i);
+    }
+    if (keep?.tabIndex != null) windowModel.showTab(keep!.tabIndex!);
+  }
+
+  void togglePinTab(WebViewModel model) {
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    model.isPinned = !model.isPinned;
+    windowModel.notifyWebViewTabUpdated();
+    _toast(model.isPinned ? "Вкладка закреплена" : "Вкладка откреплена");
+  }
+
+  /// Копия вкладки — та же страница рядом, экран вкладок остаётся открытым.
+  void duplicateTab(WebViewModel model) {
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    final copy = WebViewModel(
+        url: model.url,
+        title: model.title,
+        favicon: model.favicon,
+        isIncognitoMode: model.isIncognitoMode);
+    copy.screenshot = model.screenshot;
+    windowModel.addTab(WebViewTab(key: GlobalKey(), webViewModel: copy));
+  }
+
+  void copyTabLink(WebViewModel model) {
+    final url = model.url?.toString();
+    if (url == null || url.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: url));
+    _toast("Ссылка скопирована");
+  }
+
+  void shareTab(WebViewModel model) {
+    final url = model.url;
+    if (url != null) Share.share(url.toString(), subject: model.title);
   }
 
   /// Открыть экран вкладок (с актуальным снимком текущей страницы).
@@ -163,47 +213,49 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
   }
 
   void showFavorites() {
-    showGlassSheet(
-      context: context,
-      title: "Избранное",
-      builder: (sheetContext) {
-        return StatefulBuilder(builder: (sheetContext, setSheetState) {
+    pushGlassPage(
+      context,
+      (pageContext) => GlassPage(
+        title: "Избранное",
+        builder: (pageContext, padding) {
           final browserModel =
-              Provider.of<BrowserModel>(sheetContext, listen: true);
+              Provider.of<BrowserModel>(pageContext, listen: true);
           final favorites = browserModel.favorites;
           if (favorites.isEmpty) {
             return const GlassEmpty(
                 icon: Icons.star_border, text: "В избранном пока пусто");
           }
           return ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            children: favorites.map((favorite) {
-              final url = favorite.url;
-              final faviconUrl = favorite.favicon != null
-                  ? favorite.favicon!.url
-                  : WebUri("${url?.origin ?? ""}/favicon.ico");
-              return GlassListRow(
-                leading: CustomImage(url: faviconUrl, maxWidth: 24, height: 24),
-                title: (favorite.title?.isNotEmpty ?? false)
-                    ? favorite.title!
-                    : url?.toString() ?? "",
-                subtitle: url?.host,
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  addNewTab(url: favorite.url);
-                },
-                trailing: IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () {
-                    setSheetState(() => browserModel.removeFavorite(favorite));
-                  },
-                ),
-              );
-            }).toList(),
+            padding: padding,
+            children: [
+              GlassGroup(
+                children: favorites.map((favorite) {
+                  final url = favorite.url;
+                  final faviconUrl = favorite.favicon != null
+                      ? favorite.favicon!.url
+                      : WebUri("${url?.origin ?? ""}/favicon.ico");
+                  return GlassListRow(
+                    leading:
+                        CustomImage(url: faviconUrl, maxWidth: 24, height: 24),
+                    title: (favorite.title?.isNotEmpty ?? false)
+                        ? favorite.title!
+                        : url?.toString() ?? "",
+                    subtitle: url?.host,
+                    onTap: () {
+                      Navigator.pop(pageContext);
+                      addNewTab(url: favorite.url);
+                    },
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => browserModel.removeFavorite(favorite),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           );
-        });
-      },
+        },
+      ),
     );
   }
 
@@ -211,62 +263,66 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
 
   void showHistory() {
     final webViewModel = Provider.of<WebViewModel>(context, listen: false);
-    showGlassSheet(
-      context: context,
-      title: "История",
-      builder: (sheetContext) {
-        return FutureBuilder<WebHistory?>(
-          future: webViewModel.webViewController?.getCopyBackForwardList(),
-          builder: (context, snapshot) {
-            final items = snapshot.data?.list?.reversed.toList() ?? [];
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.all(30),
-                child: Center(child: CircularProgressIndicator()),
+    pushGlassPage(
+      context,
+      (pageContext) => GlassPage(
+        title: "История",
+        builder: (pageContext, padding) {
+          return FutureBuilder<WebHistory?>(
+            future: webViewModel.webViewController?.getCopyBackForwardList(),
+            builder: (context, snapshot) {
+              if (webViewModel.webViewController != null &&
+                  snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final items = snapshot.data?.list?.reversed.toList() ?? [];
+              if (items.isEmpty) {
+                return const GlassEmpty(
+                    icon: Icons.history, text: "История этой вкладки пуста");
+              }
+              return ListView(
+                padding: padding,
+                children: [
+                  const GlassGroupTitle("Эта вкладка"),
+                  GlassGroup(
+                    children: items.map((historyItem) {
+                      final url = historyItem.url;
+                      return GlassListRow(
+                        leading: CustomImage(
+                            url: WebUri("${url?.origin ?? ""}/favicon.ico"),
+                            maxWidth: 24,
+                            height: 24),
+                        title: (historyItem.title?.isNotEmpty ?? false)
+                            ? historyItem.title!
+                            : url.toString(),
+                        subtitle: url?.host,
+                        onTap: () {
+                          webViewModel.webViewController
+                              ?.goTo(historyItem: historyItem);
+                          Navigator.pop(pageContext);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
               );
-            }
-            if (items.isEmpty) {
-              return const GlassEmpty(
-                  icon: Icons.history, text: "История этой вкладки пуста");
-            }
-            return ListView(
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              children: items.map((historyItem) {
-                final url = historyItem.url;
-                return GlassListRow(
-                  leading: CustomImage(
-                      url: WebUri("${url?.origin ?? ""}/favicon.ico"),
-                      maxWidth: 24,
-                      height: 24),
-                  title: (historyItem.title?.isNotEmpty ?? false)
-                      ? historyItem.title!
-                      : url.toString(),
-                  subtitle: url?.host,
-                  onTap: () {
-                    webViewModel.webViewController
-                        ?.goTo(historyItem: historyItem);
-                    Navigator.pop(sheetContext);
-                  },
-                );
-              }).toList(),
-            );
-          },
-        );
-      },
+            },
+          );
+        },
+      ),
     );
   }
 
   // ---------- сохранённые страницы ----------
 
   void showWebArchives() {
-    showGlassSheet(
-      context: context,
-      title: "Сохранённые страницы",
-      builder: (sheetContext) {
-        return StatefulBuilder(builder: (sheetContext, setSheetState) {
+    pushGlassPage(
+      context,
+      (pageContext) => GlassPage(
+        title: "Сохранённые страницы",
+        builder: (pageContext, padding) {
           final browserModel =
-              Provider.of<BrowserModel>(sheetContext, listen: true);
+              Provider.of<BrowserModel>(pageContext, listen: true);
           final archives = browserModel.webArchives.values.toList();
           if (archives.isEmpty) {
             return const GlassEmpty(
@@ -274,40 +330,41 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
                 text: "Сохранённых страниц пока нет");
           }
           return ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            children: archives.map((webArchive) {
-              final url = webArchive.url;
-              final path = webArchive.path;
-              return GlassListRow(
-                leading: CustomImage(
-                    url: WebUri("${url?.origin ?? ""}/favicon.ico"),
-                    maxWidth: 24,
-                    height: 24),
-                title: (webArchive.title?.isNotEmpty ?? false)
-                    ? webArchive.title!
-                    : url?.toString() ?? "",
-                subtitle: url?.host,
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  if (path != null) {
-                    addNewTab(url: WebUri("file://$path"));
-                  }
-                },
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 20),
-                  onPressed: () {
-                    setSheetState(() {
-                      browserModel.removeWebArchive(webArchive);
-                      browserModel.save();
-                    });
-                  },
-                ),
-              );
-            }).toList(),
+            padding: padding,
+            children: [
+              GlassGroup(
+                children: archives.map((webArchive) {
+                  final url = webArchive.url;
+                  final path = webArchive.path;
+                  return GlassListRow(
+                    leading: CustomImage(
+                        url: WebUri("${url?.origin ?? ""}/favicon.ico"),
+                        maxWidth: 24,
+                        height: 24),
+                    title: (webArchive.title?.isNotEmpty ?? false)
+                        ? webArchive.title!
+                        : url?.toString() ?? "",
+                    subtitle: url?.host,
+                    onTap: () {
+                      Navigator.pop(pageContext);
+                      if (path != null) {
+                        addNewTab(url: WebUri("file://$path"));
+                      }
+                    },
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      onPressed: () {
+                        browserModel.removeWebArchive(webArchive);
+                        browserModel.save();
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           );
-        });
-      },
+        },
+      ),
     );
   }
 
@@ -395,13 +452,7 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
   }
 
   void goToSettingsPage() {
-    Navigator.push(
-        context, MaterialPageRoute(builder: (context) => const SettingsPage()));
-  }
-
-  void goToDevelopersPage() {
-    Navigator.push(context,
-        MaterialPageRoute(builder: (context) => const DevelopersPage()));
+    pushGlassPage(context, (context) => const SettingsPage());
   }
 
   Future<void> takeScreenshotAndShow() async {
@@ -415,21 +466,24 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
     await file.writeAsBytes(screenshot);
     if (!mounted) return;
 
-    await showGlassSheet(
-      context: context,
-      title: "Скриншот",
-      actions: [
-        TextButton.icon(
-          icon: const Icon(Icons.ios_share, size: 18),
-          label: const Text("Поделиться"),
-          onPressed: () => Share.shareXFiles([XFile(file.path)]),
-        ),
-      ],
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: Image.memory(screenshot, fit: BoxFit.contain),
+    await pushGlassPage(
+      context,
+      (pageContext) => GlassPage(
+        title: "Скриншот",
+        actions: [
+          StretchyGlassButton(
+            width: 44,
+            height: 44,
+            onTap: () => Share.shareXFiles([XFile(file.path)]),
+            child: const Icon(Icons.ios_share_rounded, size: 20),
+          ),
+        ],
+        builder: (pageContext, padding) => SingleChildScrollView(
+          padding: padding,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Image.memory(screenshot, fit: BoxFit.contain),
+          ),
         ),
       ),
     );
@@ -456,6 +510,7 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(text),
       duration: const Duration(milliseconds: 1600),
+      behavior: SnackBarBehavior.floating,
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 90),
     ));
   }

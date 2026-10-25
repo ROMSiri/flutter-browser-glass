@@ -272,27 +272,79 @@ class _GlassBottomBarState extends State<GlassBottomBar>
 
   @override
   Widget build(BuildContext context) {
+    final windowModel = Provider.of<WindowModel>(context, listen: true);
+    final webViewModel = Provider.of<WebViewModel>(context, listen: true);
     return LayoutBuilder(
       key: _stackKey,
       builder: (context, constraints) {
-        return AnimatedBuilder(
-          animation:
-              Listenable.merge([_menuS, _pillS, _tabsS, _compact, _edit]),
-          builder: (context, _) => _buildBar(context, constraints.biggest),
+        final size = constraints.biggest;
+        final w = math.min(size.width, _maxW);
+        final x0 = (size.width - w) / 2;
+        final cy = _centerY(context, size);
+
+        // где кнопки стоят в покое — от них растёт меню
+        final menuAnchor = Rect.fromCenter(
+            center: Offset(x0 + _margin + _h / 2, cy), width: _h, height: _h);
+        final tabsAnchor = Rect.fromCenter(
+            center: Offset(x0 + w - _margin - _h / 2, cy),
+            width: _h,
+            height: _h);
+
+        return Stack(
+          children: [
+            // меню перестраиваются только когда меняются их пункты,
+            // а не на каждом кадре анимации панели
+            Positioned.fill(
+              child: GlassPopupMenu(
+                open: _menuOpen,
+                anchor: menuAnchor,
+                entries: _menuEntries(webViewModel),
+                quickActions: _quickActions(webViewModel),
+                onClose: () => setState(() => _menuOpen = false),
+              ),
+            ),
+            Positioned.fill(
+              child: GlassPopupMenu(
+                open: _tabsMenuOpen,
+                anchor: tabsAnchor,
+                alignRight: true,
+                width: 248,
+                entries: _tabsEntries(windowModel),
+                onClose: () => setState(() => _tabsMenuOpen = false),
+              ),
+            ),
+            Positioned.fill(
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: Listenable.merge(
+                      [_menuS, _pillS, _tabsS, _compact, _edit]),
+                  builder: (context, _) =>
+                      _buildBar(context, size, webViewModel, windowModel),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
   }
 
-  Widget _buildBar(BuildContext context, Size size) {
-    final c = GlassColors.of(context);
+  /// Середина панели по высоте. Клавиатура ложится поверх страницы,
+  /// а панель поднимается над ней только пока вводится адрес.
+  double _centerY(BuildContext context, Size size) {
     final media = MediaQuery.of(context);
-    final windowModel = Provider.of<WindowModel>(context, listen: true);
-    final webViewModel = Provider.of<WebViewModel>(context, listen: true);
+    final keyboard = _editing ? media.viewInsets.bottom + 8 : 0.0;
+    final gap = math.max(media.padding.bottom + _bottom, keyboard);
+    return size.height - gap - _h / 2;
+  }
+
+  Widget _buildBar(BuildContext context, Size size, WebViewModel webViewModel,
+      WindowModel windowModel) {
+    final c = GlassColors.of(context);
 
     final w = math.min(size.width, _maxW);
     final x0 = (size.width - w) / 2;
-    final cy = size.height - media.padding.bottom - _bottom - _h / 2;
+    final cy = _centerY(context, size);
 
     final t = _compact.value; // с пружинкой может чуть перескочить
     final tc = t.clamp(0.0, 1.0);
@@ -358,37 +410,10 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     _menuRect = menuR;
     _tabsRect = tabsR;
 
-    // где кнопки стоят в покое — от них растёт меню
-    final menuAnchor = Rect.fromCenter(
-        center: Offset(x0 + _margin + _h / 2, cy), width: _h, height: _h);
-    final tabsAnchor = Rect.fromCenter(
-        center: Offset(x0 + w - _margin - _h / 2, cy), width: _h, height: _h);
-
     final buttonsActive = tc < 0.6 && e < 0.3;
 
     return Stack(
       children: [
-        // меню — под кнопкой, из которой выходит
-        Positioned.fill(
-          child: GlassPopupMenu(
-            open: _menuOpen,
-            anchor: menuAnchor,
-            entries: _menuEntries(webViewModel),
-            quickActions: _quickActions(webViewModel),
-            onClose: () => setState(() => _menuOpen = false),
-          ),
-        ),
-        Positioned.fill(
-          child: GlassPopupMenu(
-            open: _tabsMenuOpen,
-            anchor: tabsAnchor,
-            alignRight: true,
-            width: 248,
-            entries: _tabsEntries(windowModel),
-            onClose: () => setState(() => _tabsMenuOpen = false),
-          ),
-        ),
-
         // кнопка меню
         Positioned.fromRect(
           rect: menuR,
@@ -718,11 +743,6 @@ class _GlassBottomBarState extends State<GlassBottomBar>
           icon: Icons.settings_outlined,
           label: "Настройки",
           onSelected: goToSettingsPage),
-      GlassMenuEntry(
-          icon: Icons.code_rounded,
-          label: "Для разработчиков",
-          enabled: hasPage,
-          onSelected: goToDevelopersPage),
     ];
   }
 
