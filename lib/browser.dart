@@ -14,10 +14,12 @@ import 'package:provider/provider.dart';
 
 import 'app_bar/tab_viewer_app_bar.dart';
 import 'empty_tab.dart';
+import 'glass/glass_bar_controller.dart';
 import 'glass/glass_bottom_bar.dart';
 import 'glass/glass_find_bar.dart';
 import 'glass/glass_tabs_page.dart';
 import 'glass/glass_theme.dart';
+import 'glass/tab_swipe.dart';
 import 'glass/tabs_transition.dart';
 import 'models/browser_model.dart';
 import 'models/window_model.dart';
@@ -173,27 +175,67 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
             onFindOnPage: () => setState(() => _isFindingOnPage = true),
           );
     return AnimatedBuilder(
-      animation: TabsTransition.instance,
+      animation: Listenable.merge([
+        TabsTransition.instance,
+        TabSwipe.instance,
+        GlassBarController.instance,
+      ]),
       builder: (context, _) {
         final tr = TabsTransition.instance;
         final t = tabsShown ? tr.t : 0.0;
         final visible = !tabsShown || tr.pageVisible;
+        final sw = TabSwipe.instance;
+        final swiping = !tabsShown && sw.active;
+        final neighbor = swiping ? sw.neighbor : null;
+        final cover = tabsShown ? null : sw.cover;
+        final page = _pageRect();
+        // слои с ключами: соседняя вкладка появляется и исчезает,
+        // а страница и капсула не пересоздаются
         return Stack(
           children: [
             Positioned.fill(
+              key: const ValueKey('page'),
               child: IgnorePointer(
                 ignoring: tabsShown,
                 child: Opacity(
                   opacity: visible ? 1 : 0,
-                  child: _transformedPage(
-                      content, tabsShown ? tr.card : null, t, tr.radius),
+                  // свайп по капсуле: живая страница едет за пальцем
+                  child: Transform.translate(
+                    offset: Offset(swiping ? sw.offset : 0, 0),
+                    child: _transformedPage(
+                        content, tabsShown ? tr.card : null, t, tr.radius),
+                  ),
                 ),
               ),
             ),
+            // а рядом въезжает соседняя вкладка
+            if (neighbor != null)
+              Positioned.fromRect(
+                key: const ValueKey('neighbor'),
+                rect: page.shift(
+                    Offset(sw.offset + sw.side * (page.width + 12), 0)),
+                child: IgnorePointer(child: _tabPreview(neighbor)),
+              ),
+            // снимок новой вкладки, пока её страница не отрисовалась
+            if (cover != null)
+              Positioned.fromRect(
+                key: const ValueKey('cover'),
+                rect: page,
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: sw.coverOpacity.clamp(0.0, 1.0),
+                    child: Image.memory(cover,
+                        fit: BoxFit.cover,
+                        alignment: Alignment.topCenter,
+                        gaplessPlayback: true),
+                  ),
+                ),
+              ),
             // при переходе к вкладкам капсула и кнопки уезжают вниз,
             // а при возврате выезжают снизу заранее, чтобы кнопка вкладок
             // нажималась сразу, не дожидаясь конца анимации
             Positioned.fill(
+              key: const ValueKey('bar'),
               child: IgnorePointer(
                 ignoring: tabsShown && !tr.closing,
                 child: Transform.translate(
@@ -213,19 +255,52 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
     );
   }
 
+  /// Где на экране стоит страница в покое. Над капсулой со стеклянной
+  /// полосой она кончается, чтобы нижние панели сайтов (кнопки, меню,
+  /// поле ввода) были видны; когда панель сжата — идёт до самого низа.
+  Rect _pageRect() {
+    final media = MediaQuery.of(context);
+    return GlassBarController.instance.pageRect(media.size, media.padding);
+  }
+
+  /// Соседняя вкладка при свайпе: её снимок, а если его нет — название.
+  Widget _tabPreview(WebViewModel model) {
+    final c = GlassColors.of(context);
+    final shot = model.url == null ? null : model.screenshot;
+    if (shot != null) {
+      return ColoredBox(
+        color: c.page,
+        child: Image.memory(shot,
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+            gaplessPlayback: true),
+      );
+    }
+    final title = model.url == null
+        ? "Новая вкладка"
+        : (model.title?.isNotEmpty ?? false)
+            ? model.title!
+            : model.url!.host;
+    return ColoredBox(
+      color: c.page,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Text(title,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: c.muted, fontSize: 17, fontWeight: FontWeight.w600)),
+        ),
+      ),
+    );
+  }
+
   /// Страница под строкой состояния. Во время перехода она уменьшается
   /// и ложится в [card] (место снимка в карточке), обрезаясь по его высоте.
-  // капсула 48 + отступ 12 снизу + 8 воздуха над ней
-  static const double _pageBottomGap = 68;
-
   Widget _transformedPage(Widget content, Rect? card, double t, double radius) {
-    final media = MediaQuery.of(context);
-    final size = media.size;
-    // страница кончается над капсулой: нижние панели сайтов
-    // (кнопки, меню, поле ввода) видны над ней, а не под ней
-    final bottom = media.padding.bottom + _pageBottomGap;
-    final page = Rect.fromLTWH(0, media.padding.top, size.width,
-        size.height - media.padding.top - bottom);
+    final page = _pageRect();
 
     // одно и то же дерево и в покое, и при переходе — WebView не пересоздаётся
     final moving = card != null && t > 0.0001;
@@ -265,6 +340,10 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
           }
           if (_isFindingOnPage) {
             setState(() => _isFindingOnPage = false);
+            return false;
+          }
+          if (GlassBarController.instance.fullscreen) {
+            GlassBarController.instance.setFullscreen(false);
             return false;
           }
           final windowModel = Provider.of<WindowModel>(context, listen: false);

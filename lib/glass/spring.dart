@@ -17,10 +17,10 @@ class Springs {
   static const hold = SpringParams(900, 55);
 
   /// после отпускания — мягкий возврат без раскачивания
-  static const release = SpringParams(260, 24);
+  static const release = SpringParams(260, 30);
 
   /// сжатие / раскрытие нижней панели — небольшая пружинка
-  static const morph = SpringParams(170, 20);
+  static const morph = SpringParams(200, 26);
 
   /// открытие панели меню — заметная пружинка
   static const menuOpen = SpringParams(240, 17);

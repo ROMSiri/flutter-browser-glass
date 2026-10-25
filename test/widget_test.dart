@@ -7,6 +7,7 @@ import 'package:flutter_browser/glass/glass.dart';
 import 'package:flutter_browser/glass/glass_bottom_bar.dart';
 import 'package:flutter_browser/glass/glass_tabs_page.dart';
 import 'package:flutter_browser/glass/start_page.dart';
+import 'package:flutter_browser/glass/tab_swipe.dart';
 import 'package:flutter_browser/glass/tabs_transition.dart';
 import 'package:flutter_browser/main.dart';
 import 'package:flutter_browser/models/browser_model.dart';
@@ -73,6 +74,23 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  test('page ends above the glass strip, full height when compact or fullscreen',
+      () {
+    final bar = GlassBarController.instance;
+    const screen = Size(360, 780);
+    const pad = EdgeInsets.only(top: 24, bottom: 16);
+    bar.reset();
+    expect(bar.pageRect(screen, pad), const Rect.fromLTRB(0, 24, 360, 696));
+    bar.setCompact(true);
+    expect(bar.pageRect(screen, pad).bottom, 780);
+    bar.setCompact(false);
+    bar.setFullscreen(true);
+    expect(bar.compact, isTrue);
+    expect(bar.pageRect(screen, pad), const Rect.fromLTRB(0, 0, 360, 780));
+    bar.setFullscreen(false);
+    bar.reset();
+  });
+
   testWidgets('new tab shows search on top and hides the bottom bar',
       (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
@@ -121,6 +139,20 @@ void main() {
     await tester.drag(pill, const Offset(-140, 0));
     await settle(tester);
     expect(windowModel.getCurrentTabIndex(), 1);
+
+    // короткий медленный свайп: страница пружинкой возвращается на место
+    final gesture = await tester.startGesture(tester.getCenter(pill));
+    for (var i = 0; i < 6; i++) {
+      await gesture.moveBy(const Offset(10, 0));
+      await tester.pump(const Duration(milliseconds: 40));
+    }
+    expect(TabSwipe.instance.offset, greaterThan(30));
+    expect(TabSwipe.instance.neighbor?.title, 'A');
+    await tester.pump(const Duration(milliseconds: 300));
+    await gesture.up();
+    await settle(tester);
+    expect(windowModel.getCurrentTabIndex(), 1);
+    expect(TabSwipe.instance.active, isFalse);
 
     // настройки: стеклянный экран, переключатель меняет настройку
     final state = tester.state<State>(find.byType(GlassBottomBar));

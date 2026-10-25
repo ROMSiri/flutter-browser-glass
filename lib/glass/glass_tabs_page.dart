@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 
 import 'browser_actions.dart';
 import 'glass.dart';
+import 'glass_bar_controller.dart';
 import 'glass_menu.dart';
 import 'glass_theme.dart';
 import 'tabs_transition.dart';
@@ -121,11 +122,11 @@ class GlassTabsPageState extends State<GlassTabsPage>
   /// Строка с названием карточки спрятана над ней.
   /// Страница кончается над капсулой (как в браузере), поэтому и рамка
   /// летящей карточки тоже.
-  Rect _pageRect(Size screen, EdgeInsets pad) => Rect.fromLTWH(
-      0,
-      pad.top - _header,
-      screen.width,
-      screen.height - pad.top - pad.bottom - 68 + _header);
+  Rect _pageRect(Size screen, EdgeInsets pad) {
+    final page = GlassBarController.instance.pageRect(screen, pad);
+    return Rect.fromLTRB(
+        page.left, page.top - _header, page.right, page.bottom);
+  }
 
   // ---------- переходы ----------
 

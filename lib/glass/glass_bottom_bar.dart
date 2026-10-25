@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart' show VelocityTracker;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_browser/models/webview_model.dart';
 import 'package:flutter_browser/models/window_model.dart';
 import 'package:flutter_font_icons/flutter_font_icons.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 
 import 'browser_actions.dart';
@@ -15,6 +17,7 @@ import 'glass_bar_controller.dart';
 import 'glass_menu.dart';
 import 'glass_theme.dart';
 import 'spring.dart';
+import 'tab_swipe.dart';
 
 enum _Part { menu, pill, tabs }
 
@@ -55,6 +58,17 @@ class _GlassBottomBarState extends State<GlassBottomBar>
   late final SpringAnimator _compact; // 0 — обычная, 1 — сжатая
   late final SpringAnimator _edit; // 0 — адрес, 1 — ввод адреса
   late final SpringAnimator _hide; // 1 — панель уехала вниз
+  late final SpringAnimator _swipe; // сдвиг страницы при свайпе по капсуле
+  late final SpringAnimator _coverFade; // снимок новой вкладки гаснет
+
+  // свайп между вкладками
+  bool _swiping = false;
+  bool _committing = false; // страница доезжает, затем вкладка сменится
+  double _swipeFrom = 0;
+  int _swipeSide = 0; // 1 — следующая вкладка справа, -1 — предыдущая слева
+  WebViewModel? _swipeNeighbor;
+  Uint8List? _coverImage;
+  VelocityTracker? _velocity;
 
   final _stackKey = GlobalKey();
   final _urlController = TextEditingController();
@@ -87,6 +101,14 @@ class _GlassBottomBarState extends State<GlassBottomBar>
         vsync: this,
         initial: GlassBarController.instance.hidden ? 1 : 0,
         params: (_) => Springs.morph);
+    // почти без отскока: страница не должна качаться у края
+    _swipe = SpringAnimator(
+        vsync: this, params: (_) => const SpringParams(300, 34))
+      ..addListener(_onSwipeTick);
+    _coverFade = SpringAnimator(
+        vsync: this, params: (_) => const SpringParams(200, 28))
+      ..addListener(() =>
+          TabSwipe.instance.setCover(_coverImage, _coverFade.value));
     GlassBarController.instance.addListener(_onCompactChanged);
     _urlFocus.addListener(_onFocusChanged);
   }
@@ -101,6 +123,9 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     _compact.dispose();
     _edit.dispose();
     _hide.dispose();
+    _swipe.dispose();
+    _coverFade.dispose();
+    TabSwipe.instance.clearSilently();
     _urlController.dispose();
     _urlFocus.dispose();
     super.dispose();
@@ -108,7 +133,13 @@ class _GlassBottomBarState extends State<GlassBottomBar>
 
   // ---------- сжатие при листании ----------
 
+  bool _fullscreen = GlassBarController.instance.fullscreen;
+
   void _onCompactChanged() {
+    if (_fullscreen != GlassBarController.instance.fullscreen) {
+      // галочка в меню и полоса под капсулой
+      setState(() => _fullscreen = GlassBarController.instance.fullscreen);
+    }
     final hidden = GlassBarController.instance.hidden;
     if ((_hide.target == 1) != hidden) {
       if (hidden) {
@@ -189,8 +220,12 @@ class _GlassBottomBarState extends State<GlassBottomBar>
   void _onDown(_Part part, PointerDownEvent e) {
     if (_editing && part == _Part.pill)
       return; // в поле ввода — обычная работа с текстом
+    if (_committing) _finishSwipe(); // новый жест — прошлый переход сразу доезжает
     _pressed = part;
     _downAt = e.position;
+    _swiping = false;
+    _velocity = VelocityTracker.withKind(e.kind)
+      ..addPosition(e.timeStamp, e.position);
     _moved = false;
     _longPressed = false;
     _wasCompact = _compact.value > 0.5;
@@ -219,7 +254,14 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     if (_pressed != part) return;
     final dx = e.position.dx - _downAt.dx, dy = e.position.dy - _downAt.dy;
     if (dx * dx + dy * dy > 100) _moved = true;
+    _velocity?.addPosition(e.timeStamp, e.position);
     _stretchOf(part).pull(dx, dy);
+    if (part == _Part.pill && !_editing && !_longPressed) {
+      if (!_swiping && dx.abs() > 14 && dx.abs() > dy.abs() * 1.4) {
+        _beginSwipe(dx);
+      }
+      if (_swiping) _dragSwipe(dx);
+    }
     final over = _partAt(e.position) == part ? part : null;
     if (over != _hot) setState(() => _hot = over); // ушёл — синий гаснет
   }
@@ -233,13 +275,10 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     setState(() => _hot = null);
     if (_longPressed) return;
 
-    // свайп по капсуле вбок — соседняя вкладка
-    final dx = e.position.dx - _downAt.dx, dy = e.position.dy - _downAt.dy;
-    if (part == _Part.pill &&
-        !_editing &&
-        dx.abs() > 48 &&
-        dx.abs() > dy.abs() * 1.4) {
-      _switchTab(dx < 0 ? 1 : -1);
+    // свайп по капсуле вбок — страница доезжает до соседней вкладки
+    // или пружинкой возвращается на место
+    if (_swiping) {
+      _endSwipe(_velocity?.getVelocity().pixelsPerSecond.dx ?? 0);
       return;
     }
 
@@ -247,22 +286,107 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     _onTap(part, _toLocal(e.position));
   }
 
+  // ---------- свайп между вкладками ----------
+
+  /// Расстояние между соседними вкладками: ширина страницы и зазор.
+  double get _swipeFull => MediaQuery.of(context).size.width + 12;
+
+  void _beginSwipe(double dx) {
+    _swiping = true;
+    _swipeFrom = dx.sign * 14; // страница трогается с места, без скачка
+    // снимок уходящей страницы — чтобы при свайпе назад она была видна
+    final model =
+        Provider.of<WindowModel>(context, listen: false).getCurrentTab();
+    final controller = model?.webViewModel.webViewController;
+    controller
+        ?.takeScreenshot(
+            screenshotConfiguration: ScreenshotConfiguration(
+                compressFormat: CompressFormat.JPEG, quality: 30))
+        .then((data) {
+      if (data != null) model!.webViewModel.screenshot = data;
+    }).catchError((_) {});
+  }
+
   /// Влево — следующая вкладка, вправо — предыдущая.
-  void _switchTab(int delta) {
+  void _dragSwipe(double dx) {
     final windowModel = Provider.of<WindowModel>(context, listen: false);
-    final count = windowModel.webViewTabs.length;
-    final index = windowModel.getCurrentTabIndex() + delta;
-    if (count < 2 || index < 0 || index >= count) {
-      HapticFeedback.lightImpact(); // дальше вкладок нет
+    final o = dx - _swipeFrom;
+    final side = o < 0 ? 1 : -1;
+    final index = windowModel.getCurrentTabIndex() + side;
+    final tabs = windowModel.webViewTabs;
+    _swipeSide = side;
+    _swipeNeighbor =
+        index >= 0 && index < tabs.length ? tabs[index].webViewModel : null;
+    // дальше вкладок нет — страница тянется туго и вернётся назад
+    final shown = _swipeNeighbor == null
+        ? o.sign * 60 * (1 - 1 / (o.abs() / 200 + 1))
+        : o;
+    _swipe.jumpTo(shown);
+  }
+
+  void _endSwipe(double velocity) {
+    _swiping = false;
+    final o = _swipe.value;
+    final full = _swipeFull;
+    final towards = o.sign == -_swipeSide.toDouble() || o == 0;
+    final commit = _swipeNeighbor != null &&
+        towards &&
+        ((o.abs() > full * 0.28 && velocity * o >= -300) ||
+            (velocity.abs() > 450 && velocity.sign == o.sign));
+    _swipe.spring.velocity = velocity;
+    if (commit) {
+      HapticFeedback.selectionClick();
+      _committing = true;
+      _swipe.animateTo(-_swipeSide * full);
+    } else {
+      if (_swipeNeighbor == null) HapticFeedback.lightImpact();
+      _swipe.animateTo(0);
+    }
+  }
+
+  void _onSwipeTick() {
+    final v = _swipe.value;
+    if (_committing && (v - _swipe.target).abs() < 1) {
+      _finishSwipe();
       return;
     }
-    HapticFeedback.selectionClick();
+    if (!_swiping && !_committing && v == 0 && _swipe.target == 0) {
+      _swipeNeighbor = null;
+      TabSwipe.instance.reset();
+      return;
+    }
+    TabSwipe.instance
+        .update(offset: v, neighbor: _swipeNeighbor, side: _swipeSide);
+  }
+
+  /// Соседняя вкладка встала на место — теперь она и есть текущая.
+  void _finishSwipe() {
+    _committing = false;
+    final neighbor = _swipeNeighbor;
+    _swipeNeighbor = null;
+    _swipe.spring.jumpTo(0);
+    TabSwipe.instance.reset();
+    if (neighbor == null) return;
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    final index =
+        windowModel.webViewTabs.indexWhere((t) => t.webViewModel == neighbor);
+    if (index < 0) return;
     GlassBarController.instance.reset();
     windowModel.showTab(index);
+    // живая страница появляется не в тот же кадр — снимок прикрывает её
+    // и плавно гаснет
+    _coverImage = neighbor.url == null ? null : neighbor.screenshot;
+    if (_coverImage != null) {
+      _coverFade.jumpTo(1);
+      Future.delayed(const Duration(milliseconds: 140), () {
+        if (mounted) _coverFade.animateTo(0);
+      });
+    }
   }
 
   void _onCancel(_Part part) {
     if (_pressed != part) return;
+    if (_swiping) _endSwipe(0);
     _pressed = null;
     _longPressTimer?.cancel();
     _stretchOf(part).release();
@@ -413,12 +537,12 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     // широкая форма тянется в пикселях, иначе разъедется
     // вбок капсула тянется только в ту сторону, куда тянут:
     // противоположный край стоит на месте
+    // (край считается прямо из сдвига со знаком: когда капсула
+    // возвращается через середину, она не перескакивает на другую сторону)
     final pW = pw * dP.grow - dP.vert * 0.5;
-    final pullDir = dP.tx.sign;
-    final pullExt = dP.side * 1.1;
     final pH = h * dP.grow + dP.vert * 0.45 - dP.side * 0.12;
-    var pL = pcx - pW / 2 - (pullDir < 0 ? pullExt : 0);
-    var pR = pcx + pW / 2 + (pullDir > 0 ? pullExt : 0);
+    var pL = pcx - pW / 2 - math.max(-dP.tx, 0.0) * 4.4;
+    var pR = pcx + pW / 2 + math.max(dP.tx, 0.0) * 4.4;
 
     // ---- кнопки: подъезжают к строке, затем размываются и уходят под неё ----
     final tMove = math.max(math.min(1.05, t * 1.35), e);
@@ -466,8 +590,28 @@ class _GlassBottomBarState extends State<GlassBottomBar>
 
     final buttonsActive = tc < 0.6 && e < 0.3;
 
+    // стеклянная полоса под капсулой: тёмная или светлая с блюром,
+    // при листании вниз гаснет и уезжает вместе со сжатием капсулы
+    final strip = GlassBarController.instance.fullscreen ? 0.0 : 1 - tc;
+    final stripH =
+        MediaQuery.of(context).padding.bottom + GlassBarController.barSpace;
+
     return Stack(
       children: [
+        if (strip > 0.01)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: -16 * (1 - strip),
+            height: stripH,
+            child: IgnorePointer(
+              child: GlassBox(
+                borderRadius: BorderRadius.zero,
+                blur: 20,
+                fade: strip,
+              ),
+            ),
+          ),
         // кнопка меню
         Positioned.fromRect(
           rect: menuR,
@@ -580,9 +724,10 @@ class _GlassBottomBarState extends State<GlassBottomBar>
 
     final contentScale = lerpD(1, 0.86, tc);
 
-    Widget content;
+    // адрес и поле ввода сменяют друг друга плавно, без скачка текста
+    Widget? editor;
     if (_editing) {
-      content = Padding(
+      editor = Padding(
         padding: const EdgeInsets.only(left: 16, right: 6),
         child: Row(
           children: [
@@ -626,8 +771,10 @@ class _GlassBottomBarState extends State<GlassBottomBar>
           ],
         ),
       );
-    } else {
-      content = Transform(
+    }
+    Widget? address;
+    if (!_editing || e < 0.99) {
+      address = Transform(
         alignment: Alignment.center,
         transform: Matrix4.identity()
           ..scale(dP.ix * contentScale, dP.iy * contentScale),
@@ -662,6 +809,15 @@ class _GlassBottomBarState extends State<GlassBottomBar>
         ),
       );
     }
+    // пока идёт ввод, дерево не меняется — поле не теряет фокус
+    final Widget content = editor == null
+        ? Opacity(opacity: 1 - e, child: address)
+        : Stack(children: [
+            Positioned.fill(
+                child: Opacity(
+                    opacity: 1 - e, child: address ?? const SizedBox())),
+            Positioned.fill(child: Opacity(opacity: e, child: editor)),
+          ]);
 
     return GlassBox(
       child: Stack(
@@ -768,6 +924,12 @@ class _GlassBottomBarState extends State<GlassBottomBar>
           label: "Скриншот",
           enabled: hasPage,
           onSelected: takeScreenshotAndShow),
+      GlassMenuEntry(
+          icon: Icons.fullscreen_rounded,
+          label: "Полноэкранный режим",
+          checked: GlassBarController.instance.fullscreen,
+          onSelected: () => GlassBarController.instance
+              .setFullscreen(!GlassBarController.instance.fullscreen)),
       GlassMenuEntry(
           icon: Icons.dark_mode_outlined,
           label: "Тёмная тема",
@@ -878,7 +1040,8 @@ class _AddressText extends StatelessWidget {
                 host,
                 maxLines: 1,
                 softWrap: false,
-                overflow: TextOverflow.ellipsis,
+                // многоточие прыгало бы на каждом кадре сжатия
+                overflow: TextOverflow.fade,
                 style: textStyle,
               ),
             ),
