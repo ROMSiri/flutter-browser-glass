@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'glass/glass_bar_controller.dart';
 import 'glass/glass_theme.dart';
+import 'glass/start_page.dart';
 import 'long_press_alert_dialog.dart';
 import 'models/browser_model.dart';
 import 'models/window_model.dart';
@@ -39,10 +40,34 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
   final TextEditingController _httpAuthPasswordController =
       TextEditingController();
 
+  // новая вкладка без адреса показывает страницу с поиском сверху,
+  // а WebView создаётся, только когда что-то открыли
+  bool get _showsStartPage =>
+      Util.isMobile() && widget.webViewModel.url == null;
+
+  bool _wasStartPage = false;
+
+  void _onModelChanged() {
+    // адрес ввели в нижней капсуле — открываем его в этой же вкладке
+    if (_wasStartPage && !_showsStartPage && mounted) setState(() {});
+  }
+
+  void _openFromStartPage(WebUri url) {
+    widget.webViewModel.url = url;
+    final currentWebViewModel =
+        Provider.of<WebViewModel>(context, listen: false);
+    if (isCurrentTab(currentWebViewModel)) {
+      currentWebViewModel.updateWithValue(widget.webViewModel);
+    }
+    Provider.of<WindowModel>(context, listen: false).notifyWebViewTabUpdated();
+  }
+
   @override
   void initState() {
     WidgetsBinding.instance.addObserver(this);
     super.initState();
+    _wasStartPage = _showsStartPage;
+    widget.webViewModel.addListener(_onModelChanged);
 
     if (Util.isIOS() || Util.isAndroid()) {
       _pullToRefreshController = PullToRefreshController(
@@ -66,6 +91,7 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    widget.webViewModel.removeListener(_onModelChanged);
     _webViewController = null;
     widget.webViewModel.webViewController = null;
     widget.webViewModel.pullToRefreshController = null;
@@ -132,6 +158,7 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    _wasStartPage = _showsStartPage;
     return CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
           LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyR): () {
@@ -144,7 +171,9 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
             child: Container(
               // на телефоне под страницей при переходе виден её снимок
               color: Util.isMobile() ? Colors.transparent : Colors.white,
-              child: _buildWebView(),
+              child: _showsStartPage
+                  ? StartPage(onOpen: _openFromStartPage)
+                  : _buildWebView(),
             )));
   }
 

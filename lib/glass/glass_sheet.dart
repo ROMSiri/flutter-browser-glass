@@ -18,7 +18,8 @@ Future<T?> showGlassSheet<T>({
     barrierColor: Colors.black.withOpacity(0.25),
     elevation: 0,
     builder: (sheetContext) {
-      return GlassSheet(title: title, actions: actions, child: builder(sheetContext));
+      return GlassSheet(
+          title: title, actions: actions, child: builder(sheetContext));
     },
   );
 }

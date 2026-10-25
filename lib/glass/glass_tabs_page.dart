@@ -126,10 +126,14 @@ class GlassTabsPageState extends State<GlassTabsPage>
   // ---------- переходы ----------
 
   Future<void> _runHero(double to) async {
-    _busy = true;
+    // через setState: иначе последний кадр анимации так и остаётся
+    // с отключёнными нажатиями, и карточки перестают открываться
+    setState(() => _busy = true);
     final sim = SpringSimulation(_spring, _hero.value, to, _hero.velocity);
-    await _hero.animateWith(sim).orCancel.catchError((_) {});
-    _busy = false;
+    try {
+      await _hero.animateWith(sim).orCancel;
+    } catch (_) {}
+    if (mounted) setState(() => _busy = false);
   }
 
   /// Страница уменьшается и становится карточкой.
@@ -149,9 +153,13 @@ class GlassTabsPageState extends State<GlassTabsPage>
     await _runHero(1);
     // живая страница уже лежит на месте карточки; прячем её,
     // когда готов снимок, — тогда подмена незаметна
-    await TabsTransition.instance.screenshotReady
-        ?.timeout(const Duration(milliseconds: 1600), onTimeout: () {});
+    try {
+      await TabsTransition.instance.screenshotReady
+          ?.timeout(const Duration(milliseconds: 1600), onTimeout: () {});
+    } catch (_) {}
     if (!mounted) return;
+    // если пока ждали снимок, уже выбрали вкладку — её не трогаем
+    if (_hero.value < 0.99) return;
     setState(() => _flying = null);
     _publish();
   }
@@ -607,7 +615,7 @@ class _TabCardView extends StatelessWidget {
             : "Новая вкладка";
     final cardColor = incognito ? const Color(0xFF1C1C1E) : c.card;
     final textColor = incognito ? Colors.white : c.text;
-    final borderColor = isCurrent ? GlassColors.active : c.stroke;
+    final borderColor = c.stroke;
 
     return Container(
       decoration: BoxDecoration(
@@ -615,7 +623,7 @@ class _TabCardView extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
           color: borderColor.withOpacity(borderColor.opacity * chrome),
-          width: isCurrent ? 2.5 : 1,
+          width: 1,
         ),
       ),
       clipBehavior: Clip.antiAlias,

@@ -59,12 +59,28 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
     if (value.trim().isEmpty) return;
     final url = urlFromInput(value);
     final webViewModel = Provider.of<WebViewModel>(context, listen: false);
+    final tab =
+        Provider.of<WindowModel>(context, listen: false).getCurrentTab();
     if (webViewModel.webViewController != null) {
       webViewModel.webViewController!.loadUrl(urlRequest: URLRequest(url: url));
+    } else if (tab != null && tab.webViewModel.url == null) {
+      // новая вкладка: открываем прямо в ней
+      tab.webViewModel.url = url;
+      webViewModel.updateWithValue(tab.webViewModel);
     } else {
       addNewTab(url: url);
       webViewModel.url = url;
     }
+  }
+
+  /// Домашняя страница из настроек, если она задана; иначе — страница
+  /// новой вкладки с поиском.
+  WebUri? _newTabUrl() {
+    final settings =
+        Provider.of<BrowserModel>(context, listen: false).getSettings();
+    return settings.homePageEnabled && settings.customUrlHomePage.isNotEmpty
+        ? WebUri(settings.customUrlHomePage)
+        : null;
   }
 
   void addNewTab({WebUri? url}) {
@@ -74,7 +90,8 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
     GlassBarController.instance.reset();
     windowModel.addTab(WebViewTab(
       key: GlobalKey(),
-      webViewModel: WebViewModel(url: url ?? homeUrl()),
+      // без адреса — страница новой вкладки с поиском сверху
+      webViewModel: WebViewModel(url: url ?? _newTabUrl()),
     ));
   }
 
@@ -85,7 +102,8 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
     GlassBarController.instance.reset();
     windowModel.addTab(WebViewTab(
       key: GlobalKey(),
-      webViewModel: WebViewModel(url: url ?? homeUrl(), isIncognitoMode: true),
+      webViewModel:
+          WebViewModel(url: url ?? _newTabUrl(), isIncognitoMode: true),
     ));
   }
 
@@ -159,8 +177,10 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
       SystemChannels.textInput.invokeMethod('TextInput.hide');
       FocusManager.instance.primaryFocus?.unfocus();
       if (webViewController != null) {
-        await webViewController.evaluateJavascript(
-            source: "document.activeElement.blur();");
+        await webViewController
+            .evaluateJavascript(source: "document.activeElement.blur();")
+            .timeout(const Duration(milliseconds: 300), onTimeout: () => null)
+            .catchError((_) => null);
       }
       await Future.delayed(const Duration(milliseconds: 300));
     }
@@ -174,7 +194,7 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
           .timeout(const Duration(milliseconds: 1500), onTimeout: () => null)
           .then((data) {
         if (data != null) webViewModel.screenshot = data;
-      });
+      }).catchError((_) {});
     } else {
       TabsTransition.instance.screenshotReady = null;
     }

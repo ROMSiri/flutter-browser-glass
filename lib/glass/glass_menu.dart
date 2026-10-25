@@ -192,8 +192,7 @@ class _GlassPopupMenuState extends State<GlassPopupMenu>
 
   void _onMove(PointerMoveEvent e) {
     if (!_pressed) return;
-    _stretch.pull(
-        e.localPosition.dx - _down.dx, e.localPosition.dy - _down.dy);
+    _stretch.pull(e.localPosition.dx - _down.dx, e.localPosition.dy - _down.dy);
     _setHot(_hitTest(e.localPosition));
   }
 
@@ -322,9 +321,8 @@ class _GlassPopupMenuState extends State<GlassPopupMenu>
                       child: Center(
                         child: HotColor(
                           hot: _hotQuick == i || widget.quickActions[i].active,
-                          color: widget.quickActions[i].enabled
-                              ? c.text
-                              : c.muted,
+                          color:
+                              widget.quickActions[i].enabled ? c.text : c.muted,
                           child: Container(
                             width: 40,
                             height: 40,

@@ -187,8 +187,8 @@ class _StretchyGlassButtonState extends State<StretchyGlassButton>
       onPointerMove: widget.enabled
           ? (e) {
               if (!_pressed) return;
-              _stretch.pull(e.localPosition.dx - _down.dx,
-                  e.localPosition.dy - _down.dy);
+              _stretch.pull(
+                  e.localPosition.dx - _down.dx, e.localPosition.dy - _down.dy);
               final inside = _inside(e.localPosition);
               if (inside != _hot) setState(() => _hot = inside);
             }
@@ -219,12 +219,16 @@ class _StretchyGlassButtonState extends State<StretchyGlassButton>
             final d = _stretch.deform;
             final sx = round
                 ? d.scaleX
-                : d.grow * (1 + d.side * 1.1 / widget.width -
-                    d.vert * 0.5 / widget.width);
+                : d.grow *
+                    (1 +
+                        d.side * 1.1 / widget.width -
+                        d.vert * 0.5 / widget.width);
             final sy = round
                 ? d.scaleY
-                : d.grow * (1 + d.vert * 0.45 / widget.height -
-                    d.side * 0.12 / widget.height);
+                : d.grow *
+                    (1 +
+                        d.vert * 0.45 / widget.height -
+                        d.side * 0.12 / widget.height);
             return Transform(
               alignment: Alignment.center,
               transform: Matrix4.identity()

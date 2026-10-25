@@ -12,6 +12,17 @@ class GlassBarController extends ChangeNotifier {
 
   bool get compact => _compact;
 
+  // спрятана ли панель целиком (пока вводят текст в поиск новой вкладки)
+  bool _hidden = false;
+
+  bool get hidden => _hidden;
+
+  void setHidden(bool value) {
+    if (value == _hidden) return;
+    _hidden = value;
+    notifyListeners();
+  }
+
   void onScroll(int y) {
     final dy = y - _lastY;
     if (y < 10) {

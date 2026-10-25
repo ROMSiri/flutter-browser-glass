@@ -54,6 +54,7 @@ class _GlassBottomBarState extends State<GlassBottomBar>
   late final StretchController _tabsS;
   late final SpringAnimator _compact; // 0 — обычная, 1 — сжатая
   late final SpringAnimator _edit; // 0 — адрес, 1 — ввод адреса
+  late final SpringAnimator _hide; // 1 — панель уехала вниз
 
   final _stackKey = GlobalKey();
   final _urlController = TextEditingController();
@@ -82,6 +83,10 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     _tabsS = StretchController(vsync: this, growTo: 1.04);
     _compact = SpringAnimator(vsync: this, params: (_) => Springs.morph);
     _edit = SpringAnimator(vsync: this, params: (_) => Springs.morph);
+    _hide = SpringAnimator(
+        vsync: this,
+        initial: GlassBarController.instance.hidden ? 1 : 0,
+        params: (_) => Springs.morph);
     GlassBarController.instance.addListener(_onCompactChanged);
     _urlFocus.addListener(_onFocusChanged);
   }
@@ -95,6 +100,7 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     _tabsS.dispose();
     _compact.dispose();
     _edit.dispose();
+    _hide.dispose();
     _urlController.dispose();
     _urlFocus.dispose();
     super.dispose();
@@ -103,6 +109,16 @@ class _GlassBottomBarState extends State<GlassBottomBar>
   // ---------- сжатие при листании ----------
 
   void _onCompactChanged() {
+    final hidden = GlassBarController.instance.hidden;
+    if ((_hide.target == 1) != hidden) {
+      if (hidden) {
+        setState(() {
+          _menuOpen = false;
+          _tabsMenuOpen = false;
+        });
+      }
+      _hide.animateTo(hidden ? 1 : 0);
+    }
     final compact = GlassBarController.instance.compact;
     if (compact && (_editing || _pressed != null)) {
       // пока палец на панели или идёт ввод адреса — не сжимаемся
@@ -318,9 +334,20 @@ class _GlassBottomBarState extends State<GlassBottomBar>
               child: RepaintBoundary(
                 child: AnimatedBuilder(
                   animation: Listenable.merge(
-                      [_menuS, _pillS, _tabsS, _compact, _edit]),
-                  builder: (context, _) =>
-                      _buildBar(context, size, webViewModel, windowModel),
+                      [_menuS, _pillS, _tabsS, _compact, _edit, _hide]),
+                  builder: (context, _) {
+                    final bar =
+                        _buildBar(context, size, webViewModel, windowModel);
+                    final h = _hide.value;
+                    // поиск новой вкладки: капсула и кнопки уезжают вниз
+                    return IgnorePointer(
+                      ignoring: GlassBarController.instance.hidden,
+                      child: Transform.translate(
+                        offset: Offset(0, 160 * h),
+                        child: bar,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

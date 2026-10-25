@@ -132,8 +132,7 @@ class StretchController extends ChangeNotifier {
   List<SpringValue> get _all => [_up, _down, _side, _shift, _grow, _lift];
 
   // мягкая резина: сопротивление растёт плавно, предел — без «стены»
-  double _rubber(double d) =>
-      radius * (1 - 1 / (d.abs() * tight / radius + 1));
+  double _rubber(double d) => radius * (1 - 1 / (d.abs() * tight / radius + 1));
 
   void press() {
     _pressed = true;
@@ -262,7 +261,8 @@ class SpringAnimator extends ChangeNotifier {
       spring.jumpTo(0);
     }
     notifyListeners();
-    if (!moving || (clampBelowZero && spring.value == 0 && spring.target == 0)) {
+    if (!moving ||
+        (clampBelowZero && spring.value == 0 && spring.target == 0)) {
       _ticker.stop();
     }
   }

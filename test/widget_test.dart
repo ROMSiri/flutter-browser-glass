@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_browser/browser.dart';
 import 'package:flutter_browser/glass/glass_bar_controller.dart';
 import 'package:flutter_browser/glass/glass_tabs_page.dart';
+import 'package:flutter_browser/glass/start_page.dart';
 import 'package:flutter_browser/glass/tabs_transition.dart';
 import 'package:flutter_browser/main.dart';
 import 'package:flutter_browser/models/browser_model.dart';
@@ -67,6 +68,31 @@ void main() {
     await tester.pumpWidget(app());
     await settle(tester);
     expect(find.byType(Browser), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('new tab shows search on top and hides the bottom bar',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(app());
+    await settle(tester);
+    windowModel
+        .addTab(WebViewTab(key: GlobalKey(), webViewModel: WebViewModel()));
+    await settle(tester);
+    expect(find.byType(StartPage), findsOneWidget);
+    // строка поиска сверху, клавиатура открылась — нижняя панель спрятана
+    final search = tester.getRect(find.byType(TextField).first);
+    expect(search.top, lessThan(200));
+    expect(GlassBarController.instance.hidden, isTrue);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await settle(tester);
+    expect(GlassBarController.instance.hidden, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await tester
+        .runAsync(() => Future.delayed(const Duration(milliseconds: 600)));
+    await tester.pump(const Duration(seconds: 1));
     debugDefaultTargetPlatformOverride = null;
   });
 

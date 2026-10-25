@@ -37,13 +37,13 @@ class GlassColors {
   );
 
   static const GlassColors dark = GlassColors(
-    tint: Color(0xB8000000), // тёмное стекло, 72%
+    tint: Color(0xB82C2C30), // графитовое стекло, 72%
     text: Color(0xFFFFFFFF),
     muted: Color(0x8CFFFFFF),
     stroke: Color(0x14FFFFFF),
     hover: Color(0x14FFFFFF),
-    page: Color(0xFF050505),
-    card: Color(0xFF141416),
+    page: Color(0xFF1C1C1F), // тёмный графит, а не чёрный
+    card: Color(0xFF2A2A2E),
     shadow: Color(0x66000000),
   );
 
@@ -58,7 +58,8 @@ class GlassTheme {
   static ThemeData dark() => _build(Brightness.dark);
 
   static ThemeData _build(Brightness brightness) {
-    final c = brightness == Brightness.dark ? GlassColors.dark : GlassColors.light;
+    final c =
+        brightness == Brightness.dark ? GlassColors.dark : GlassColors.light;
     final scheme = ColorScheme.fromSeed(
       seedColor: GlassColors.active,
       brightness: brightness,
@@ -92,8 +93,8 @@ class GlassTheme {
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
-        titleTextStyle: TextStyle(
-            color: c.text, fontSize: 20, fontWeight: FontWeight.w600),
+        titleTextStyle:
+            TextStyle(color: c.text, fontSize: 20, fontWeight: FontWeight.w600),
         iconTheme: IconThemeData(color: c.text),
         actionsIconTheme: IconThemeData(color: c.text),
       ),
@@ -164,7 +165,8 @@ class GlassTheme {
             borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: GlassColors.active, width: 1.2)),
+            borderSide:
+                const BorderSide(color: GlassColors.active, width: 1.2)),
       ),
       textSelectionTheme: TextSelectionThemeData(
         cursorColor: GlassColors.active,
