@@ -163,10 +163,13 @@ class _FlutterBrowserAppState extends State<FlutterBrowserApp>
   @override
   void initState() {
     super.initState();
-    WindowManagerPlus.current.addListener(this);
+    // WindowManagerPlus инициализируется только на компьютере, на телефоне его нет
+    if (Util.isDesktop()) {
+      WindowManagerPlus.current.addListener(this);
+    }
 
     // https://github.com/pichillilorenzo/window_manager_plus/issues/5
-    if (WindowManagerPlus.current.id > 0 && Platform.isMacOS) {
+    if (Util.isDesktop() && WindowManagerPlus.current.id > 0 && Platform.isMacOS) {
       _appLifecycleListener = AppLifecycleListener(
         onStateChange: _handleStateChange,
       );
@@ -183,8 +186,10 @@ class _FlutterBrowserAppState extends State<FlutterBrowserApp>
 
   @override
   void dispose() {
-    WindowManagerPlus.current.removeListener(this);
-    _appLifecycleListener?.dispose();
+    if (Util.isDesktop()) {
+      WindowManagerPlus.current.removeListener(this);
+      _appLifecycleListener?.dispose();
+    }
     super.dispose();
   }
 
