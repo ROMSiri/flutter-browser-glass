@@ -52,7 +52,6 @@ class GlassTabsPageState extends State<GlassTabsPage>
 
   /// Вкладка, которая сейчас «летит» между страницей и сеткой.
   WebViewModel? _flying;
-  bool _busy = false;
 
   final Set<WebViewModel> _closing = {};
   late final Set<WebViewModel> _known;
@@ -120,49 +119,70 @@ class GlassTabsPageState extends State<GlassTabsPage>
 
   /// Где на экране страница: под строкой состояния и до самого низа.
   /// Строка с названием карточки спрятана над ней.
+  /// Страница кончается над капсулой (как в браузере), поэтому и рамка
+  /// летящей карточки тоже.
   Rect _pageRect(Size screen, EdgeInsets pad) => Rect.fromLTWH(
-      0, pad.top - _header, screen.width, screen.height - pad.top + _header);
+      0,
+      pad.top - _header,
+      screen.width,
+      screen.height - pad.top - pad.bottom - 68 + _header);
 
   // ---------- переходы ----------
 
-  Future<void> _runHero(double to) async {
-    // через setState: иначе последний кадр анимации так и остаётся
-    // с отключёнными нажатиями, и карточки перестают открываться
-    setState(() => _busy = true);
+  int _run =
+      0; // номер текущего перехода: новый нажатый переход отменяет старый
+  bool _toPage = false; // карточка раскрывается обратно в страницу
+
+  /// Пружина к [to]. Можно перебить в любой момент — как в Safari,
+  /// новое нажатие подхватывает анимацию с текущего места и скорости.
+  /// Возвращает false, если переход перебили.
+  Future<bool> _runHero(double to) async {
+    final run = ++_run;
+    _toPage = to == 0;
     final sim = SpringSimulation(_spring, _hero.value, to, _hero.velocity);
     try {
       await _hero.animateWith(sim).orCancel;
     } catch (_) {}
-    if (mounted) setState(() => _busy = false);
+    return mounted && run == _run;
   }
 
   /// Страница уменьшается и становится карточкой.
-  Future<void> _intro() async {
+  Future<void> _intro({bool scroll = true}) async {
     if (!mounted) return;
     final media = MediaQuery.of(context);
     final windowModel = Provider.of<WindowModel>(context, listen: false);
     final order = _ordered(windowModel);
     final i = _flying != null ? order.indexOf(_flying!) : -1;
-    if (i >= 0 && _scroll.hasClients) {
+    if (scroll && i >= 0 && _scroll.hasClients) {
       // текущая вкладка — посередине экрана
       final slot = _slot(i, media.size, media.padding.top + _topGap);
       final target = slot.center.dy - media.size.height / 2;
       _scroll.jumpTo(
           target.clamp(0.0, _scroll.position.maxScrollExtent).toDouble());
     }
-    await _runHero(1);
+    if (!await _runHero(1)) return;
+    final run = _run;
     // живая страница уже лежит на месте карточки; прячем её,
     // когда готов снимок, — тогда подмена незаметна
     try {
       await TabsTransition.instance.screenshotReady
           ?.timeout(const Duration(milliseconds: 1600), onTimeout: () {});
     } catch (_) {}
-    if (!mounted) return;
-    // если пока ждали снимок, уже выбрали вкладку — её не трогаем
-    if (_hero.value < 0.99) return;
+    if (!mounted || run != _run) return;
     setState(() => _flying = null);
     _publish();
   }
+
+  /// Кнопка вкладок нажата, пока карточка ещё раскрывается в страницу:
+  /// страница сразу разворачивается обратно в карточку.
+  void reopen() {
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    setState(() => _flying = windowModel.getCurrentTab()?.webViewModel);
+    _intro(scroll: false);
+  }
+
+  /// Идёт ли сейчас раскрытие карточки в страницу.
+  bool get isClosing => _toPage;
 
   /// Где рамка летящей карточки: от страницы на весь экран до места в сетке.
   Rect _heroRect(WebViewModel model, double t) {
@@ -183,8 +203,12 @@ class GlassTabsPageState extends State<GlassTabsPage>
     if (!mounted) return;
     final model = _flying;
     if (model == null) {
-      TabsTransition.instance
-          .update(t: _hero.value, card: null, radius: 0, pageVisible: false);
+      TabsTransition.instance.update(
+          t: _hero.value,
+          card: null,
+          radius: 0,
+          pageVisible: false,
+          closing: false);
       return;
     }
     final frame = _heroRect(model, _hero.value);
@@ -196,12 +220,12 @@ class GlassTabsPageState extends State<GlassTabsPage>
           math.max(frame.top + _header, frame.bottom)),
       radius: lerpD(0, _radius, tc),
       pageVisible: true,
+      closing: _toPage,
     );
   }
 
   /// Карточка раскрывается в страницу, и экран вкладок закрывается.
   Future<void> openTab(WebViewModel model) async {
-    if (_busy) return;
     final browserModel = Provider.of<BrowserModel>(context, listen: false);
     final windowModel = Provider.of<WindowModel>(context, listen: false);
     setState(() {
@@ -213,7 +237,9 @@ class GlassTabsPageState extends State<GlassTabsPage>
     // страница под экраном вкладок переключается сразу —
     // к концу анимации она уже на месте карточки
     if (model.tabIndex != null) windowModel.showTab(model.tabIndex!);
-    await _runHero(0);
+    _toPage = true;
+    _publish();
+    if (!await _runHero(0)) return;
     browserModel.showTabScroller = false;
   }
 
@@ -309,7 +335,7 @@ class GlassTabsPageState extends State<GlassTabsPage>
                   child: Transform.scale(
                     scale: lerpD(0.92, 1, tc),
                     child: IgnorePointer(
-                      ignoring: _busy,
+                      ignoring: false,
                       child: SingleChildScrollView(
                         controller: _scroll,
                         child: SizedBox(
@@ -398,7 +424,7 @@ class GlassTabsPageState extends State<GlassTabsPage>
                 child: Transform.translate(
                   offset: Offset(0, 160 * (1 - tc)),
                   child: IgnorePointer(
-                    ignoring: _busy,
+                    ignoring: false,
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 528),
@@ -510,11 +536,9 @@ class GlassTabsPageState extends State<GlassTabsPage>
       width: slot.width,
       height: slot.height,
       // пока карточка летит, её место в сетке пустое
-      child: Visibility(
-        visible: model != _flying,
-        maintainState: true,
-        maintainAnimation: true,
-        maintainSize: true,
+      // нажать на неё можно и посреди анимации — как в Safari
+      child: Opacity(
+        opacity: model != _flying ? 1 : 0,
         child: card,
       ),
     );
@@ -615,86 +639,83 @@ class _TabCardView extends StatelessWidget {
             : "Новая вкладка";
     final cardColor = incognito ? const Color(0xFF1C1C1E) : c.card;
     final textColor = incognito ? Colors.white : c.text;
-    final borderColor = c.stroke;
 
-    return Container(
-      decoration: BoxDecoration(
+    // без рамки и без подложки под скруглённым краем: светлая обводка
+    // и фон, просвечивающий по краю обрезки, давали белые края
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: ColoredBox(
         color: cardColor.withOpacity(chrome),
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(
-          color: borderColor.withOpacity(borderColor.opacity * chrome),
-          width: 1,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            height: 40,
-            child: Opacity(
-              opacity: chrome,
-              child: Row(
-                children: [
-                  const SizedBox(width: 12),
-                  if (incognito)
-                    const Icon(MaterialCommunityIcons.incognito,
-                        size: 16, color: Colors.white)
-                  else
-                    CustomImage(url: faviconUrl, maxWidth: 16, height: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: textColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  if (model.isPinned)
-                    Padding(
-                      padding: EdgeInsets.only(right: onClose == null ? 12 : 0),
-                      child: Icon(Icons.push_pin,
-                          size: 14, color: textColor.withOpacity(0.6)),
-                    ),
-                  if (onClose != null)
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onClose,
-                      child: SizedBox(
-                        width: 36,
-                        height: 40,
-                        child: Icon(Icons.close_rounded,
-                            size: 18, color: textColor.withOpacity(0.6)),
-                      ),
-                    )
-                  else
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: 40,
+              child: Opacity(
+                opacity: chrome,
+                child: Row(
+                  children: [
                     const SizedBox(width: 12),
-                ],
+                    if (incognito)
+                      const Icon(MaterialCommunityIcons.incognito,
+                          size: 16, color: Colors.white)
+                    else
+                      CustomImage(url: faviconUrl, maxWidth: 16, height: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: textColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (model.isPinned)
+                      Padding(
+                        padding:
+                            EdgeInsets.only(right: onClose == null ? 12 : 0),
+                        child: Icon(Icons.push_pin,
+                            size: 14, color: textColor.withOpacity(0.6)),
+                      ),
+                    if (onClose != null)
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onClose,
+                        child: SizedBox(
+                          width: 36,
+                          height: 40,
+                          child: Icon(Icons.close_rounded,
+                              size: 18, color: textColor.withOpacity(0.6)),
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 12),
+                  ],
+                ),
               ),
             ),
-          ),
-          Expanded(
-            child: Container(
-              color: incognito ? const Color(0xFF2C2C2E) : Colors.white,
-              child: model.screenshot != null
-                  ? Image.memory(
-                      model.screenshot!,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.topCenter,
-                      gaplessPlayback: true,
-                    )
-                  : Center(
-                      child: Icon(Icons.public_rounded,
-                          size: 36,
-                          color: incognito ? Colors.white24 : Colors.black12),
-                    ),
+            Expanded(
+              child: Container(
+                color: incognito ? const Color(0xFF2C2C2E) : c.card,
+                child: model.screenshot != null
+                    ? Image.memory(
+                        model.screenshot!,
+                        fit: BoxFit.cover,
+                        alignment: Alignment.topCenter,
+                        gaplessPlayback: true,
+                      )
+                    : Center(
+                        child: Icon(Icons.public_rounded,
+                            size: 36,
+                            color: incognito ? Colors.white24 : Colors.black12),
+                      ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -110,8 +110,15 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
           // пока открыт экран вкладок, страница сверху не должна забирать
           // нажатия — иначе карточки и кнопки под ней не нажимаются
           Positioned.fill(
-            child: IgnorePointer(
-              ignoring: canShowTabScroller,
+            child: AnimatedBuilder(
+              animation: TabsTransition.instance,
+              builder: (context, child) => IgnorePointer(
+                // пока карточка раскрывается в страницу, капсула уже
+                // нажимается: можно сразу вернуться во вкладки
+                ignoring:
+                    canShowTabScroller && !TabsTransition.instance.closing,
+                child: child,
+              ),
               child: _buildWebViewTabs(),
             ),
           ),
@@ -184,12 +191,18 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
               ),
             ),
             // при переходе к вкладкам капсула и кнопки уезжают вниз,
-            // а при возврате выезжают снизу
+            // а при возврате выезжают снизу заранее, чтобы кнопка вкладок
+            // нажималась сразу, не дожидаясь конца анимации
             Positioned.fill(
               child: IgnorePointer(
-                ignoring: tabsShown,
+                ignoring: tabsShown && !tr.closing,
                 child: Transform.translate(
-                  offset: Offset(0, 160 * t.clamp(0.0, 1.0)),
+                  offset: Offset(
+                      0,
+                      160 *
+                          (tr.closing
+                              ? ((t - 0.6) / 0.4).clamp(0.0, 1.0)
+                              : t.clamp(0.0, 1.0))),
                   child: bar,
                 ),
               ),
@@ -202,11 +215,17 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
 
   /// Страница под строкой состояния. Во время перехода она уменьшается
   /// и ложится в [card] (место снимка в карточке), обрезаясь по его высоте.
+  // капсула 48 + отступ 12 снизу + 8 воздуха над ней
+  static const double _pageBottomGap = 68;
+
   Widget _transformedPage(Widget content, Rect? card, double t, double radius) {
     final media = MediaQuery.of(context);
     final size = media.size;
-    final page = Rect.fromLTWH(
-        0, media.padding.top, size.width, size.height - media.padding.top);
+    // страница кончается над капсулой: нижние панели сайтов
+    // (кнопки, меню, поле ввода) видны над ней, а не под ней
+    final bottom = media.padding.bottom + _pageBottomGap;
+    final page = Rect.fromLTWH(0, media.padding.top, size.width,
+        size.height - media.padding.top - bottom);
 
     // одно и то же дерево и в покое, и при переходе — WebView не пересоздаётся
     final moving = card != null && t > 0.0001;

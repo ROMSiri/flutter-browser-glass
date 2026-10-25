@@ -732,15 +732,7 @@ class _GlassBottomBarState extends State<GlassBottomBar>
   List<GlassMenuEntry> _menuEntries(WebViewModel webViewModel) {
     final hasPage = webViewModel.webViewController != null;
     return [
-      GlassMenuEntry(
-          icon: Icons.add_rounded,
-          label: "Новая вкладка",
-          onSelected: addNewTab),
-      GlassMenuEntry(
-          icon: MaterialCommunityIcons.incognito,
-          label: "Новая вкладка инкогнито",
-          onSelected: addNewIncognitoTab),
-      const GlassMenuEntry.divider(),
+      // новая вкладка и инкогнито — по долгому нажатию на кнопку вкладок
       GlassMenuEntry(
           icon: Icons.star_border_rounded,
           label: "Избранное",

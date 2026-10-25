@@ -23,6 +23,10 @@ class TabsTransition extends ChangeNotifier {
   /// страница прячется, и остаётся обычная карточка со снимком.
   bool pageVisible = true;
 
+  /// Карточка раскрывается обратно в страницу: нижняя капсула уже
+  /// снова нажимается — можно сразу вернуться во вкладки.
+  bool closing = false;
+
   /// Готов ли свежий снимок текущей страницы для её карточки.
   Future<void>? screenshotReady;
 
@@ -31,7 +35,9 @@ class TabsTransition extends ChangeNotifier {
     required Rect? card,
     required double radius,
     required bool pageVisible,
+    bool closing = false,
   }) {
+    this.closing = closing;
     this.t = t;
     this.card = card;
     this.radius = radius;
@@ -45,5 +51,6 @@ class TabsTransition extends ChangeNotifier {
     card = null;
     radius = 0;
     pageVisible = true;
+    closing = false;
   }
 }

@@ -23,6 +23,7 @@ import 'glass_bar_controller.dart';
 import 'glass.dart';
 import 'glass_page.dart';
 import 'glass_sheet.dart';
+import 'glass_tabs_page.dart';
 import 'glass_theme.dart';
 import 'tabs_transition.dart';
 
@@ -173,16 +174,13 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
     final webViewModel = windowModel.getCurrentTab()?.webViewModel;
     final webViewController = webViewModel?.webViewController;
 
+    // клавиатуру убираем, но не ждём её: переход начинается сразу
     if (View.of(context).viewInsets.bottom > 0.0) {
       SystemChannels.textInput.invokeMethod('TextInput.hide');
       FocusManager.instance.primaryFocus?.unfocus();
-      if (webViewController != null) {
-        await webViewController
-            .evaluateJavascript(source: "document.activeElement.blur();")
-            .timeout(const Duration(milliseconds: 300), onTimeout: () => null)
-            .catchError((_) => null);
-      }
-      await Future.delayed(const Duration(milliseconds: 300));
+      webViewController
+          ?.evaluateJavascript(source: "document.activeElement.blur();")
+          .catchError((_) => null);
     }
 
     // снимок для карточки делается, пока страница уже сжимается в неё
@@ -199,6 +197,13 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
       TabsTransition.instance.screenshotReady = null;
     }
 
+    // экран вкладок ещё на месте (карточка раскрывается в страницу) —
+    // разворачиваем её обратно, не дожидаясь конца анимации
+    final tabsPage = glassTabsPageKey.currentState;
+    if (browserModel.showTabScroller && tabsPage != null) {
+      tabsPage.reopen();
+      return;
+    }
     browserModel.showTabScroller = true;
   }
 

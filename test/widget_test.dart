@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_browser/browser.dart';
 import 'package:flutter_browser/glass/glass_bar_controller.dart';
+import 'package:flutter_browser/glass/glass.dart';
 import 'package:flutter_browser/glass/glass_bottom_bar.dart';
 import 'package:flutter_browser/glass/glass_tabs_page.dart';
 import 'package:flutter_browser/glass/start_page.dart';
@@ -181,6 +182,27 @@ void main() {
     await settle(tester);
     expect(browserModel.showTabScroller, isFalse);
     expect(find.byType(GlassTabsPage), findsNothing);
+
+    // как в Safari: нажатия не ждут конца анимации
+    final tabsButton = find.descendant(
+        of: find.byType(GlassBottomBar), matching: find.byType(TabsCountIcon));
+    await tester.tap(tabsButton);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    // страница ещё сжимается, а карточку уже можно нажать
+    await tester.tap(find
+        .descendant(of: find.byType(GlassTabsPage), matching: find.text('A'))
+        .hitTestable());
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    // карточка ещё раскрывается, а кнопка вкладок уже снова работает
+    await tester.tap(tabsButton);
+    await settle(tester);
+    expect(browserModel.showTabScroller, isTrue);
+    expect(TabsTransition.instance.t, closeTo(1, 0.01));
+
     // дать отложенному сохранению вкладок сработать
     // (оно сверяется с настоящими часами, а не с тестовыми)
     await tester.pumpWidget(const SizedBox());
