@@ -128,8 +128,8 @@ class _GlassBottomBarState extends State<GlassBottomBar>
   void _startEditing() {
     final webViewModel = Provider.of<WebViewModel>(context, listen: false);
     _urlController.text = webViewModel.url?.toString() ?? "";
-    _urlController.selection = TextSelection(
-        baseOffset: 0, extentOffset: _urlController.text.length);
+    _urlController.selection =
+        TextSelection(baseOffset: 0, extentOffset: _urlController.text.length);
     setState(() => _editing = true);
     _edit.animateTo(1);
     _urlFocus.requestFocus();
@@ -171,7 +171,8 @@ class _GlassBottomBarState extends State<GlassBottomBar>
       };
 
   void _onDown(_Part part, PointerDownEvent e) {
-    if (_editing && part == _Part.pill) return; // в поле ввода — обычная работа с текстом
+    if (_editing && part == _Part.pill)
+      return; // в поле ввода — обычная работа с текстом
     _pressed = part;
     _downAt = e.position;
     _moved = false;
@@ -501,12 +502,8 @@ class _GlassBottomBarState extends State<GlassBottomBar>
       StretchDeform dP, double pH) {
     final url = webViewModel.url;
     final host = url?.host ?? "";
-    final full = url == null
-        ? ""
-        : (url.toString() == "about:blank"
-            ? ""
-            : "$host${url.path == "/" ? "" : url.path}");
-    final text = tc > 0.5 ? host : full;
+    final blank = url == null || url.toString() == "about:blank";
+    final path = blank || url.path == "/" ? "" : url.path;
     final progress = webViewModel.progress;
 
     IconData leadIcon;
@@ -596,15 +593,14 @@ class _GlassBottomBarState extends State<GlassBottomBar>
               child: HotColor(
                 hot: _hot == _Part.pill,
                 color: c.text,
-                child: Text(
-                  text.isEmpty ? "Поиск или адрес сайта" : text,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: tc > 0.5 ? TextAlign.center : TextAlign.left,
+                child: _AddressText(
+                  host: blank || host.isEmpty ? "Поиск или адрес сайта" : host,
+                  path: path,
+                  t: tc,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
-                    color: text.isEmpty ? c.muted : null,
+                    color: blank || host.isEmpty ? c.muted : null,
                   ),
                 ),
               ),
@@ -614,8 +610,8 @@ class _GlassBottomBarState extends State<GlassBottomBar>
               child: reloadOpacity > 0.01
                   ? Opacity(
                       opacity: reloadOpacity,
-                      child: Icon(Icons.refresh_rounded,
-                          size: 20, color: c.text),
+                      child:
+                          Icon(Icons.refresh_rounded, size: 20, color: c.text),
                     )
                   : null,
             ),
@@ -674,7 +670,9 @@ class _GlassBottomBarState extends State<GlassBottomBar>
         onSelected: () => webViewModel.webViewController?.reload(),
       ),
       GlassMenuQuickAction(
-        icon: isCurrentFavorite() ? Icons.star_rounded : Icons.star_border_rounded,
+        icon: isCurrentFavorite()
+            ? Icons.star_rounded
+            : Icons.star_border_rounded,
         active: isCurrentFavorite(),
         enabled: hasPage,
         closeOnSelect: false,
@@ -692,7 +690,9 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     final hasPage = webViewModel.webViewController != null;
     return [
       GlassMenuEntry(
-          icon: Icons.add_rounded, label: "Новая вкладка", onSelected: addNewTab),
+          icon: Icons.add_rounded,
+          label: "Новая вкладка",
+          onSelected: addNewTab),
       GlassMenuEntry(
           icon: MaterialCommunityIcons.incognito,
           label: "Новая вкладка инкогнито",
@@ -749,7 +749,9 @@ class _GlassBottomBarState extends State<GlassBottomBar>
   List<GlassMenuEntry> _tabsEntries(WindowModel windowModel) {
     return [
       GlassMenuEntry(
-          icon: Icons.add_rounded, label: "Новая вкладка", onSelected: addNewTab),
+          icon: Icons.add_rounded,
+          label: "Новая вкладка",
+          onSelected: addNewTab),
       GlassMenuEntry(
           icon: MaterialCommunityIcons.incognito,
           label: "Вкладка инкогнито",
@@ -760,5 +762,110 @@ class _GlassBottomBarState extends State<GlassBottomBar>
           enabled: windowModel.webViewTabs.isNotEmpty,
           onSelected: closeAllTabs),
     ];
+  }
+}
+
+/// Адрес в капсуле: домен и путь. Пока панель сжимается, путь плавно
+/// сужается и гаснет, а домен так же плавно съезжает к середине —
+/// без скачка от полного адреса к домену.
+class _AddressText extends StatelessWidget {
+  final String host;
+  final String path;
+  final double t; // 0 — обычная панель, 1 — сжатая
+  final TextStyle style;
+
+  const _AddressText({
+    required this.host,
+    required this.path,
+    required this.t,
+    required this.style,
+  });
+
+  static const double _fade = 18;
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = DefaultTextStyle.of(context).style.merge(style);
+    final scaler = MediaQuery.textScalerOf(context);
+    double measure(String text) {
+      if (text.isEmpty) return 0;
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: textStyle),
+        maxLines: 1,
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+      )..layout();
+      return painter.width;
+    }
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final avail = constraints.maxWidth;
+      final hostW = math.min(measure(host), avail);
+      final fullPathW = measure(path);
+      final roomForPath = math.max(0.0, avail - hostW);
+      final pathW = math.min(fullPathW, roomForPath) * (1 - t);
+      final left = (avail - hostW - pathW) / 2 * t;
+      final cut = fullPathW > roomForPath + 0.5;
+
+      Widget pathText = Text(
+        path,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.clip,
+        style: textStyle,
+      );
+      if (cut || t > 0) {
+        // обрезанный край пути растворяется, а не обрывается
+        pathText = ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (rect) => LinearGradient(
+            colors: const [Colors.white, Colors.transparent],
+            stops: [
+              ((rect.width - _fade) / math.max(rect.width, 1)).clamp(0.0, 1.0),
+              1,
+            ],
+          ).createShader(rect),
+          child: pathText,
+        );
+      }
+
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: left,
+            width: hostW,
+            top: 0,
+            bottom: 0,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                host,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: textStyle,
+              ),
+            ),
+          ),
+          if (pathW > 0.5)
+            Positioned(
+              left: left + hostW,
+              width: pathW,
+              top: 0,
+              bottom: 0,
+              child: Opacity(
+                opacity: (1 - t * 1.3).clamp(0.0, 1.0),
+                child: ClipRect(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: pathText,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    });
   }
 }

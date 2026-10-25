@@ -24,6 +24,7 @@ import 'glass.dart';
 import 'glass_page.dart';
 import 'glass_sheet.dart';
 import 'glass_theme.dart';
+import 'tabs_transition.dart';
 
 /// Все действия браузера (вкладки, избранное, история, тема…),
 /// которыми пользуются нижняя панель, меню и экран вкладок.
@@ -164,15 +165,18 @@ mixin BrowserActions<T extends StatefulWidget> on State<T> {
       await Future.delayed(const Duration(milliseconds: 300));
     }
 
+    // снимок для карточки делается, пока страница уже сжимается в неё
     if (webViewModel != null && webViewController != null) {
-      webViewModel.screenshot = await webViewController
+      TabsTransition.instance.screenshotReady = webViewController
           .takeScreenshot(
               screenshotConfiguration: ScreenshotConfiguration(
                   compressFormat: CompressFormat.JPEG, quality: 30))
-          .timeout(
-            const Duration(milliseconds: 1500),
-            onTimeout: () => null,
-          );
+          .timeout(const Duration(milliseconds: 1500), onTimeout: () => null)
+          .then((data) {
+        if (data != null) webViewModel.screenshot = data;
+      });
+    } else {
+      TabsTransition.instance.screenshotReady = null;
     }
 
     browserModel.showTabScroller = true;

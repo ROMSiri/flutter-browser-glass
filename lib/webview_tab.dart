@@ -142,7 +142,8 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
             autofocus: true,
             focusNode: _focusNode,
             child: Container(
-              color: Colors.white,
+              // на телефоне под страницей при переходе виден её снимок
+              color: Util.isMobile() ? Colors.transparent : Colors.white,
               child: _buildWebView(),
             )));
   }

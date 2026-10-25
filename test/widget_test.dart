@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_browser/browser.dart';
+import 'package:flutter_browser/glass/glass_bar_controller.dart';
 import 'package:flutter_browser/glass/glass_tabs_page.dart';
+import 'package:flutter_browser/glass/tabs_transition.dart';
 import 'package:flutter_browser/main.dart';
 import 'package:flutter_browser/models/browser_model.dart';
 import 'package:flutter_browser/models/webview_model.dart';
@@ -65,6 +67,51 @@ void main() {
     await tester.pumpWidget(app());
     await settle(tester);
     expect(find.byType(Browser), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('page shrinks into the tabs screen and back', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(app());
+    await settle(tester);
+    windowModel.addTab(_FakeTab(
+        key: GlobalKey(),
+        webViewModel: WebViewModel(url: WebUri('about:blank'), title: 'A')));
+    await settle(tester);
+
+    // сжатие панели при листании: адрес плавно уходит к домену
+    GlassBarController.instance.setCompact(true);
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await settle(tester);
+    GlassBarController.instance.setCompact(false);
+    await settle(tester);
+
+    browserModel.showTabScroller = true;
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    // середина перехода: страница уже сжимается в карточку
+    final mid = TabsTransition.instance;
+    expect(mid.card, isNotNull);
+    expect(mid.card!.width, lessThan(360));
+    await settle(tester);
+    expect(TabsTransition.instance.pageVisible, isFalse);
+
+    glassTabsPageKey.currentState!.closeToCurrent();
+    await settle(tester);
+    expect(browserModel.showTabScroller, isFalse);
+    expect(find.byType(GlassTabsPage), findsNothing);
+    // дать отложенному сохранению вкладок сработать
+    // (оно сверяется с настоящими часами, а не с тестовыми)
+    await tester.pumpWidget(const SizedBox());
+    await tester
+        .runAsync(() => Future.delayed(const Duration(milliseconds: 600)));
+    await tester.pump(const Duration(seconds: 1));
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -136,4 +183,17 @@ void main() {
     expect(browserModel.showTabScroller, isFalse);
     debugDefaultTargetPlatformOverride = null;
   });
+}
+
+/// Вкладка без настоящего WebView: в тестах окна Android нет.
+class _FakeTab extends WebViewTab {
+  const _FakeTab({super.key, required super.webViewModel});
+
+  @override
+  State<WebViewTab> createState() => _FakeTabState();
+}
+
+class _FakeTabState extends State<WebViewTab> {
+  @override
+  Widget build(BuildContext context) => const ColoredBox(color: Colors.white);
 }

@@ -14,6 +14,7 @@ import 'browser_actions.dart';
 import 'glass.dart';
 import 'glass_menu.dart';
 import 'glass_theme.dart';
+import 'tabs_transition.dart';
 
 /// Через него кнопка «назад» телефона закрывает экран вкладок с анимацией.
 final glassTabsPageKey = GlobalKey<GlassTabsPageState>();
@@ -68,13 +69,15 @@ class GlassTabsPageState extends State<GlassTabsPage>
     final windowModel = Provider.of<WindowModel>(context, listen: false);
     _known = windowModel.webViewTabs.map((t) => t.webViewModel).toSet();
     _flying = windowModel.getCurrentTab()?.webViewModel;
-    _hero = AnimationController.unbounded(vsync: this, value: 0);
+    _hero = AnimationController.unbounded(vsync: this, value: 0)
+      ..addListener(_publish);
     _scroll = ScrollController();
     WidgetsBinding.instance.addPostFrameCallback((_) => _intro());
   }
 
   @override
   void dispose() {
+    TabsTransition.instance.resetSilently();
     _hero.dispose();
     _scroll.dispose();
     super.dispose();
@@ -144,7 +147,48 @@ class GlassTabsPageState extends State<GlassTabsPage>
           target.clamp(0.0, _scroll.position.maxScrollExtent).toDouble());
     }
     await _runHero(1);
-    if (mounted) setState(() => _flying = null);
+    // живая страница уже лежит на месте карточки; прячем её,
+    // когда готов снимок, — тогда подмена незаметна
+    await TabsTransition.instance.screenshotReady
+        ?.timeout(const Duration(milliseconds: 1600), onTimeout: () {});
+    if (!mounted) return;
+    setState(() => _flying = null);
+    _publish();
+  }
+
+  /// Где рамка летящей карточки: от страницы на весь экран до места в сетке.
+  Rect _heroRect(WebViewModel model, double t) {
+    final media = MediaQuery.of(context);
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    final order = _ordered(windowModel);
+    final page = _pageRect(media.size, media.padding);
+    final i = order.indexOf(model);
+    if (i < 0) return page;
+    final offset = _scroll.hasClients ? _scroll.offset : 0.0;
+    final slot = _slot(i, media.size, media.padding.top + _topGap)
+        .shift(Offset(0, -offset));
+    return Rect.lerp(page, slot, t)!;
+  }
+
+  /// Сообщить браузеру, куда сейчас положить живую страницу.
+  void _publish() {
+    if (!mounted) return;
+    final model = _flying;
+    if (model == null) {
+      TabsTransition.instance
+          .update(t: _hero.value, card: null, radius: 0, pageVisible: false);
+      return;
+    }
+    final frame = _heroRect(model, _hero.value);
+    final tc = _hero.value.clamp(0.0, 1.0);
+    TabsTransition.instance.update(
+      t: _hero.value,
+      // снимок в карточке — под строкой с названием
+      card: Rect.fromLTRB(frame.left, frame.top + _header, frame.right,
+          math.max(frame.top + _header, frame.bottom)),
+      radius: lerpD(0, _radius, tc),
+      pageVisible: true,
+    );
   }
 
   /// Карточка раскрывается в страницу, и экран вкладок закрывается.
@@ -157,6 +201,7 @@ class GlassTabsPageState extends State<GlassTabsPage>
       _actionTab = null;
       _flying = model;
     });
+    _publish();
     // страница под экраном вкладок переключается сразу —
     // к концу анимации она уже на месте карточки
     if (model.tabIndex != null) windowModel.showTab(model.tabIndex!);
@@ -296,9 +341,7 @@ class GlassTabsPageState extends State<GlassTabsPage>
               ),
 
               // летящая карточка: страница ↔ место в сетке
-              if (_flying != null)
-                _heroCard(_flying!, order, screen, media.padding, gridTop, t,
-                    current, c),
+              if (_flying != null) _heroCard(_flying!, t, current),
 
               // меню «⋯»
               Positioned.fill(
@@ -343,8 +386,9 @@ class GlassTabsPageState extends State<GlassTabsPage>
                 left: 16,
                 right: 16,
                 bottom: barBottom,
-                child: Opacity(
-                  opacity: tc,
+                // кнопки выезжают снизу и уезжают вниз
+                child: Transform.translate(
+                  offset: Offset(0, 160 * (1 - tc)),
                   child: IgnorePointer(
                     ignoring: _busy,
                     child: Center(
@@ -468,25 +512,8 @@ class GlassTabsPageState extends State<GlassTabsPage>
     );
   }
 
-  Widget _heroCard(
-      WebViewModel model,
-      List<WebViewModel> order,
-      Size screen,
-      EdgeInsets pad,
-      double top,
-      double t,
-      WebViewModel? current,
-      GlassColors c) {
-    final i = order.indexOf(model);
-    final page = _pageRect(screen, pad);
-    var rect = page;
-    if (i >= 0) {
-      // место в сетке — с учётом прокрутки и лёгкого уменьшения сетки
-      var slot = _slot(i, screen, top);
-      final offset = _scroll.hasClients ? _scroll.offset : 0.0;
-      slot = slot.shift(Offset(0, -offset));
-      rect = Rect.lerp(page, slot, t)!;
-    }
+  Widget _heroCard(WebViewModel model, double t, WebViewModel? current) {
+    final rect = _heroRect(model, t);
     final tc = t.clamp(0.0, 1.0);
     return Positioned.fromRect(
       rect: rect,

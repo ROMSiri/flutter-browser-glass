@@ -18,6 +18,7 @@ import 'glass/glass_bottom_bar.dart';
 import 'glass/glass_find_bar.dart';
 import 'glass/glass_tabs_page.dart';
 import 'glass/glass_theme.dart';
+import 'glass/tabs_transition.dart';
 import 'models/browser_model.dart';
 import 'models/window_model.dart';
 
@@ -101,12 +102,12 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
         browserModel.showTabScroller && windowModel.webViewTabs.isNotEmpty;
 
     if (Util.isMobile()) {
-      // экран вкладок ложится поверх страницы: страница под ним остаётся живой,
-      // и он может плавно «вырасти» из неё и обратно в неё «раскрыться»
+      // экран вкладок лежит под страницей: при переходе сама живая страница
+      // сжимается в свою карточку и раскрывается из неё обратно
       return Stack(
         children: [
-          Positioned.fill(child: _buildWebViewTabs()),
           if (canShowTabScroller) Positioned.fill(child: GlassTabsPage()),
+          Positioned.fill(child: _buildWebViewTabs()),
         ],
       );
     }
@@ -123,6 +124,11 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
   /// Телефон: страница на весь экран, поверх неё — нижняя стеклянная панель.
   Widget _buildMobileScaffold() {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final browserModel = Provider.of<BrowserModel>(context, listen: false);
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    final tabsShown =
+        browserModel.showTabScroller && windowModel.webViewTabs.isNotEmpty;
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: (dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
           .copyWith(
@@ -131,30 +137,94 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
         systemNavigationBarContrastEnforced: false,
       ),
       child: Scaffold(
-        backgroundColor: GlassColors.of(context).page,
+        // пока открыт экран вкладок, под страницей виден он
+        backgroundColor:
+            tabsShown ? Colors.transparent : GlassColors.of(context).page,
         // клавиатура ложится поверх страницы и не сжимает её
         resizeToAvoidBottomInset: false,
-        body: Stack(
+        body: _buildMobileBody(tabsShown),
+      ),
+    );
+  }
+
+  Widget _buildMobileBody(bool tabsShown) {
+    // страница и панель строятся один раз, а на кадрах перехода
+    // только сдвигаются и масштабируются
+    final content = _buildWebViewTabsContent();
+    final bar = _isFindingOnPage
+        ? GlassFindBar(
+            onClose: () => setState(() => _isFindingOnPage = false),
+          )
+        : GlassBottomBar(
+            onFindOnPage: () => setState(() => _isFindingOnPage = true),
+          );
+    return AnimatedBuilder(
+      animation: TabsTransition.instance,
+      builder: (context, _) {
+        final tr = TabsTransition.instance;
+        final t = tabsShown ? tr.t : 0.0;
+        final visible = !tabsShown || tr.pageVisible;
+        return Stack(
           children: [
             Positioned.fill(
-              child: SafeArea(
-                bottom: false,
-                child: _buildWebViewTabsContent(),
+              child: IgnorePointer(
+                ignoring: tabsShown,
+                child: Opacity(
+                  opacity: visible ? 1 : 0,
+                  child: _transformedPage(
+                      content, tabsShown ? tr.card : null, t, tr.radius),
+                ),
               ),
             ),
+            // при переходе к вкладкам капсула и кнопки уезжают вниз,
+            // а при возврате выезжают снизу
             Positioned.fill(
-              child: _isFindingOnPage
-                  ? GlassFindBar(
-                      onClose: () => setState(() => _isFindingOnPage = false),
-                    )
-                  : GlassBottomBar(
-                      onFindOnPage: () =>
-                          setState(() => _isFindingOnPage = true),
-                    ),
+              child: IgnorePointer(
+                ignoring: tabsShown,
+                child: Transform.translate(
+                  offset: Offset(0, 160 * t.clamp(0.0, 1.0)),
+                  child: bar,
+                ),
+              ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  /// Страница под строкой состояния. Во время перехода она уменьшается
+  /// и ложится в [card] (место снимка в карточке), обрезаясь по его высоте.
+  Widget _transformedPage(Widget content, Rect? card, double t, double radius) {
+    final media = MediaQuery.of(context);
+    final size = media.size;
+    final page = Rect.fromLTWH(
+        0, media.padding.top, size.width, size.height - media.padding.top);
+
+    // одно и то же дерево и в покое, и при переходе — WebView не пересоздаётся
+    final moving = card != null && t > 0.0001;
+    final r = moving ? card : page;
+    final scale = r.width / page.width;
+    final clipH = r.height / scale;
+    return Stack(
+      children: [
+        Positioned(
+          left: 0,
+          top: 0,
+          width: page.width,
+          height: page.height,
+          child: Transform(
+            transform: Matrix4.identity()
+              ..translate(r.left, r.top)
+              ..scale(scale, scale),
+            child: ClipRRect(
+              clipper: _PageClipper(clipH, radius / scale),
+              clipBehavior: moving ? Clip.antiAlias : Clip.none,
+              child: content,
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -389,4 +459,23 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
               },
             )));
   }
+}
+
+/// Обрезает страницу по высоте карточки и скругляет нижние углы как у неё.
+class _PageClipper extends CustomClipper<RRect> {
+  final double height;
+  final double radius;
+
+  _PageClipper(this.height, this.radius);
+
+  @override
+  RRect getClip(Size size) => RRect.fromRectAndCorners(
+        Rect.fromLTWH(0, 0, size.width, height.clamp(0.0, size.height)),
+        bottomLeft: Radius.circular(radius),
+        bottomRight: Radius.circular(radius),
+      );
+
+  @override
+  bool shouldReclip(_PageClipper old) =>
+      old.height != height || old.radius != radius;
 }
