@@ -8,6 +8,8 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -30,3 +32,10 @@ jobs:
         with:
           name: app-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: APK ${{ github.run_number }}
+          files: build/app/outputs/flutter-apk/app-release.apk
