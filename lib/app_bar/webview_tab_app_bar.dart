@@ -90,7 +90,8 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
   @override
   Widget build(BuildContext context) {
     return Selector<WebViewModel, ({WebUri? item1, int? item2})>(
-        selector: (context, webViewModel) => (item1: webViewModel.url, item2: webViewModel.tabIndex),
+        selector: (context, webViewModel) =>
+            (item1: webViewModel.url, item2: webViewModel.tabIndex),
         builder: (context, record, child) {
           if (_prevTabIndex != record.item2) {
             _searchController?.text = record.item1?.toString() ?? '';
@@ -100,7 +101,8 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
             if (record.item1 == null) {
               _searchController?.text = "";
             }
-            if (record.item1 != null && _focusNode != null &&
+            if (record.item1 != null &&
+                _focusNode != null &&
                 !_focusNode!.hasFocus) {
               _searchController?.text = record.item1.toString();
             }
@@ -113,23 +115,23 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
               builder: (context, isIncognitoMode, child) {
                 return leading != null
                     ? AppBar(
-                  backgroundColor: isIncognitoMode
-                      ? Colors.black38
-                      : Theme.of(context).colorScheme.primaryContainer,
-                  leading: leading,
-                  leadingWidth: 130,
-                  titleSpacing: 0.0,
-                  title: _buildSearchTextField(),
-                  actions: _buildActionsMenu(),
-                )
+                        backgroundColor: isIncognitoMode
+                            ? Colors.black38
+                            : Theme.of(context).colorScheme.primaryContainer,
+                        leading: leading,
+                        leadingWidth: 130,
+                        titleSpacing: 0.0,
+                        title: _buildSearchTextField(),
+                        actions: _buildActionsMenu(),
+                      )
                     : AppBar(
-                  backgroundColor: isIncognitoMode
-                      ? Colors.black38
-                      : Theme.of(context).colorScheme.primaryContainer,
-                  titleSpacing: 10.0,
-                  title: _buildSearchTextField(),
-                  actions: _buildActionsMenu(),
-                );
+                        backgroundColor: isIncognitoMode
+                            ? Colors.black38
+                            : Theme.of(context).colorScheme.primaryContainer,
+                        titleSpacing: 10.0,
+                        title: _buildSearchTextField(),
+                        actions: _buildActionsMenu(),
+                      );
               });
         });
   }

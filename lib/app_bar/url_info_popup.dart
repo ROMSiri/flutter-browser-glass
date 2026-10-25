@@ -47,111 +47,116 @@ class _UrlInfoPopupState extends State<UrlInfoPopup> {
     return Material(
         type: MaterialType.transparency,
         child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        StatefulBuilder(
-          builder: (context, setState) {
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  showFullInfoUrl = !showFullInfoUrl;
-                });
-              },
-              child: Container(
-                  padding: const EdgeInsets.only(bottom: 15.0),
-                  constraints: const BoxConstraints(maxHeight: 100.0),
-                  child: RichText(
-                    maxLines: showFullInfoUrl ? null : 2,
-                    overflow: showFullInfoUrl
-                        ? TextOverflow.clip
-                        : TextOverflow.ellipsis,
-                    text: TextSpan(
-                      children: <TextSpan>[
-                        TextSpan(
-                            text: url?.scheme,
-                            style: defaultTextSpanStyle.copyWith(
-                                color: webViewModel.isSecure
-                                    ? Colors.green
-                                    : c.muted,
-                                fontWeight: FontWeight.bold)),
-                        TextSpan(
-                            text: webViewModel.url?.toString() == "about:blank"
-                                ? ':'
-                                : '://',
-                            style: defaultTextSpanStyle),
-                        TextSpan(
-                            text: url?.host,
-                            style: defaultTextSpanStyle.copyWith(
-                                color: c.text)),
-                        TextSpan(text: url?.path, style: defaultTextSpanStyle),
-                        TextSpan(text: url?.query, style: defaultTextSpanStyle),
-                      ],
-                    ),
-                  )),
-            );
-          },
-        ),
-        Container(
-          padding: const EdgeInsets.only(bottom: 10.0),
-          child: Text(text1,
-              style: TextStyle(
-                fontSize: 16.0,
-                fontWeight: FontWeight.w600,
-                color: c.text,
-              )),
-        ),
-        RichText(
-            text: TextSpan(
-                style: TextStyle(fontSize: 12.0, color: c.text.withOpacity(0.85)),
-                children: [
-              TextSpan(
-                text: "$text2 ",
-              ),
-              TextSpan(
-                text: "Details",
-                style: const TextStyle(color: GlassColors.active),
-                recognizer: TapGestureRecognizer()
-                  ..onTap = () async {
-                    Navigator.maybePop(context);
-
-                    await widget.route.popped;
-
-                    await Future.delayed(Duration(
-                        milliseconds:
-                            widget.transitionDuration.inMilliseconds - 200));
-
-                    showDialog(
-                      context: context,
-                      builder: (context) {
-                        return const CertificateInfoPopup();
-                      },
-                    );
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            StatefulBuilder(
+              builder: (context, setState) {
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      showFullInfoUrl = !showFullInfoUrl;
+                    });
                   },
-              ),
-            ])),
-        const SizedBox(
-          height: 30.0,
-        ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: ElevatedButton(
-            child: const Text(
-              "WebView Tab Settings",
+                  child: Container(
+                      padding: const EdgeInsets.only(bottom: 15.0),
+                      constraints: const BoxConstraints(maxHeight: 100.0),
+                      child: RichText(
+                        maxLines: showFullInfoUrl ? null : 2,
+                        overflow: showFullInfoUrl
+                            ? TextOverflow.clip
+                            : TextOverflow.ellipsis,
+                        text: TextSpan(
+                          children: <TextSpan>[
+                            TextSpan(
+                                text: url?.scheme,
+                                style: defaultTextSpanStyle.copyWith(
+                                    color: webViewModel.isSecure
+                                        ? Colors.green
+                                        : c.muted,
+                                    fontWeight: FontWeight.bold)),
+                            TextSpan(
+                                text: webViewModel.url?.toString() ==
+                                        "about:blank"
+                                    ? ':'
+                                    : '://',
+                                style: defaultTextSpanStyle),
+                            TextSpan(
+                                text: url?.host,
+                                style: defaultTextSpanStyle.copyWith(
+                                    color: c.text)),
+                            TextSpan(
+                                text: url?.path, style: defaultTextSpanStyle),
+                            TextSpan(
+                                text: url?.query, style: defaultTextSpanStyle),
+                          ],
+                        ),
+                      )),
+                );
+              },
             ),
-            onPressed: () async {
-              Navigator.maybePop(context);
+            Container(
+              padding: const EdgeInsets.only(bottom: 10.0),
+              child: Text(text1,
+                  style: TextStyle(
+                    fontSize: 16.0,
+                    fontWeight: FontWeight.w600,
+                    color: c.text,
+                  )),
+            ),
+            RichText(
+                text: TextSpan(
+                    style: TextStyle(
+                        fontSize: 12.0, color: c.text.withOpacity(0.85)),
+                    children: [
+                  TextSpan(
+                    text: "$text2 ",
+                  ),
+                  TextSpan(
+                    text: "Details",
+                    style: const TextStyle(color: GlassColors.active),
+                    recognizer: TapGestureRecognizer()
+                      ..onTap = () async {
+                        Navigator.maybePop(context);
 
-              await widget.route.popped;
+                        await widget.route.popped;
 
-              Future.delayed(widget.transitionDuration, () {
-                if (widget.onWebViewTabSettingsClicked != null) {
-                  widget.onWebViewTabSettingsClicked!();
-                }
-              });
-            },
-          ),
-        ),
-      ],
-    ));
+                        await Future.delayed(Duration(
+                            milliseconds:
+                                widget.transitionDuration.inMilliseconds -
+                                    200));
+
+                        showDialog(
+                          context: context,
+                          builder: (context) {
+                            return const CertificateInfoPopup();
+                          },
+                        );
+                      },
+                  ),
+                ])),
+            const SizedBox(
+              height: 30.0,
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton(
+                child: const Text(
+                  "WebView Tab Settings",
+                ),
+                onPressed: () async {
+                  Navigator.maybePop(context);
+
+                  await widget.route.popped;
+
+                  Future.delayed(widget.transitionDuration, () {
+                    if (widget.onWebViewTabSettingsClicked != null) {
+                      widget.onWebViewTabSettingsClicked!();
+                    }
+                  });
+                },
+              ),
+            ),
+          ],
+        ));
   }
 }

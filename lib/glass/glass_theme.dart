@@ -37,7 +37,7 @@ class GlassColors {
   );
 
   static const GlassColors dark = GlassColors(
-    tint: Color(0xB82C2C30), // графитовое стекло, 72%
+    tint: Color(0xB8000000), // тёмное стекло, 72%
     text: Color(0xFFFFFFFF),
     muted: Color(0x8CFFFFFF),
     stroke: Color(0x14FFFFFF),

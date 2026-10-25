@@ -138,8 +138,7 @@ void main(List<String> args) async {
             windowModel!.setCurrentWebViewModel(webViewModel);
             return windowModel;
           },
-          create: (BuildContext context) =>
-              WindowModel(id: null),
+          create: (BuildContext context) => WindowModel(id: null),
         ),
       ],
       child: const FlutterBrowserApp(),
@@ -156,7 +155,6 @@ class FlutterBrowserApp extends StatefulWidget {
 
 class _FlutterBrowserAppState extends State<FlutterBrowserApp>
     with WindowListener {
-
   // https://github.com/pichillilorenzo/window_manager_plus/issues/5
   late final AppLifecycleListener? _appLifecycleListener;
 
@@ -169,7 +167,9 @@ class _FlutterBrowserAppState extends State<FlutterBrowserApp>
     }
 
     // https://github.com/pichillilorenzo/window_manager_plus/issues/5
-    if (Util.isDesktop() && WindowManagerPlus.current.id > 0 && Platform.isMacOS) {
+    if (Util.isDesktop() &&
+        WindowManagerPlus.current.id > 0 &&
+        Platform.isMacOS) {
       _appLifecycleListener = AppLifecycleListener(
         onStateChange: _handleStateChange,
       );
@@ -178,9 +178,11 @@ class _FlutterBrowserAppState extends State<FlutterBrowserApp>
 
   void _handleStateChange(AppLifecycleState state) {
     // https://github.com/pichillilorenzo/window_manager_plus/issues/5
-    if (WindowManagerPlus.current.id > 0 && Platform.isMacOS && state == AppLifecycleState.hidden) {
-      SchedulerBinding.instance.handleAppLifecycleStateChanged(
-          AppLifecycleState.inactive);
+    if (WindowManagerPlus.current.id > 0 &&
+        Platform.isMacOS &&
+        state == AppLifecycleState.hidden) {
+      SchedulerBinding.instance
+          .handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     }
   }
 
@@ -197,8 +199,7 @@ class _FlutterBrowserAppState extends State<FlutterBrowserApp>
   Widget build(BuildContext context) {
     // тема: как в системе / светлая / тёмная — выбирается в меню и настройках
     final materialApp = Selector<BrowserModel, int>(
-      selector: (context, browserModel) =>
-          browserModel.getSettings().themeMode,
+      selector: (context, browserModel) => browserModel.getSettings().themeMode,
       builder: (context, themeMode, child) {
         return MaterialApp(
           title: 'Flutter Browser',

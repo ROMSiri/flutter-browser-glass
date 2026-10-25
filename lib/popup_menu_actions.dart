@@ -60,5 +60,5 @@ class PopupMenuActions {
       DEVELOPERS,
       INAPPWEBVIEW_PROJECT
     ];
-}
+  }
 }

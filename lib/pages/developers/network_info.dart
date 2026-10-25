@@ -149,8 +149,8 @@ class _NetworkInfoState extends State<NetworkInfo> {
               return Row(children: <Widget>[
                 InkWell(
                     onTap: () {
-                      Clipboard.setData(
-                          ClipboardData(text: loadedResoruce.url?.toString() ?? ''));
+                      Clipboard.setData(ClipboardData(
+                          text: loadedResoruce.url?.toString() ?? ''));
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(

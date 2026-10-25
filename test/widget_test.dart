@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_browser/browser.dart';
 import 'package:flutter_browser/glass/glass_bar_controller.dart';
+import 'package:flutter_browser/glass/glass_bottom_bar.dart';
 import 'package:flutter_browser/glass/glass_tabs_page.dart';
 import 'package:flutter_browser/glass/start_page.dart';
 import 'package:flutter_browser/glass/tabs_transition.dart';
@@ -96,6 +97,52 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  testWidgets('swipe on the capsule switches tabs; settings open',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(app());
+    await settle(tester);
+    for (final title in ['A', 'B']) {
+      windowModel.addTab(_FakeTab(
+          key: GlobalKey(),
+          webViewModel:
+              WebViewModel(url: WebUri('about:blank'), title: title)));
+    }
+    await settle(tester);
+    expect(windowModel.getCurrentTabIndex(), 1);
+
+    final pill = find.text('Поиск или адрес сайта');
+    await tester.drag(pill, const Offset(140, 0));
+    await settle(tester);
+    expect(windowModel.getCurrentTabIndex(), 0);
+    await tester.drag(pill, const Offset(-140, 0));
+    await settle(tester);
+    expect(windowModel.getCurrentTabIndex(), 1);
+
+    // настройки: стеклянный экран, переключатель меняет настройку
+    final state = tester.state<State>(find.byType(GlassBottomBar));
+    (state as dynamic).goToSettingsPage();
+    await settle(tester);
+    expect(find.text('Настройки'), findsOneWidget);
+    await tester.tap(find.text('Тёмная'));
+    await settle(tester);
+    expect(browserModel.getSettings().themeMode, 2);
+    expect(browserModel.getSettings().blockPopups, isFalse);
+    await tester.ensureVisible(find.text('Блокировать всплывающие окна'));
+    await settle(tester);
+    await tester.tap(find.text('Блокировать всплывающие окна'));
+    await settle(tester);
+    expect(browserModel.getSettings().blockPopups, isTrue);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester
+        .runAsync(() => Future.delayed(const Duration(milliseconds: 600)));
+    await tester.pump(const Duration(seconds: 1));
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   testWidgets('page shrinks into the tabs screen and back', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 3;
@@ -128,7 +175,9 @@ void main() {
     await settle(tester);
     expect(TabsTransition.instance.pageVisible, isFalse);
 
-    glassTabsPageKey.currentState!.closeToCurrent();
+    // нажатие на карточку внутри настоящего браузера
+    await tester.tap(find.descendant(
+        of: find.byType(GlassTabsPage), matching: find.text('A')));
     await settle(tester);
     expect(browserModel.showTabScroller, isFalse);
     expect(find.byType(GlassTabsPage), findsNothing);

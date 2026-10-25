@@ -128,7 +128,8 @@ class _JavaScriptConsoleState extends State<JavaScriptConsole> {
               IconButton(
                 icon: const Icon(Icons.cancel),
                 onPressed: () {
-                  final windowModel = Provider.of<WindowModel>(context, listen: false);
+                  final windowModel =
+                      Provider.of<WindowModel>(context, listen: false);
                   var webViewModel = windowModel.getCurrentTab()?.webViewModel;
                   if (webViewModel != null) {
                     webViewModel.setJavaScriptConsoleResults([]);

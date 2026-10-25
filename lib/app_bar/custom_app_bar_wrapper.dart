@@ -6,7 +6,8 @@ import 'package:flutter_browser/util.dart';
 
 import '../glass/glass_theme.dart';
 
-class CustomAppBarWrapper extends StatefulWidget implements PreferredSizeWidget {
+class CustomAppBarWrapper extends StatefulWidget
+    implements PreferredSizeWidget {
   final AppBar appBar;
 
   CustomAppBarWrapper({super.key, required this.appBar})
@@ -31,7 +32,9 @@ class _CustomAppBarWrapperState extends State<CustomAppBarWrapper> {
     final List<Widget> children = [];
 
     if (Util.isDesktop()) {
-      children.add(const DesktopAppBar(showTabs: false,));
+      children.add(const DesktopAppBar(
+        showTabs: false,
+      ));
     } else {
       // на телефоне — панель из того же матового стекла
       final c = GlassColors.of(context);

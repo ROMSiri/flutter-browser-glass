@@ -23,12 +23,26 @@ class BrowserSettings {
   /// Тема приложения: 0 — как в системе, 1 — светлая, 2 — тёмная.
   int themeMode;
 
+  // настройки страниц — общие для всех вкладок
+  bool javaScriptEnabled;
+  bool supportZoom;
+  bool mediaNeedsGesture; // видео и звук — только по нажатию
+  bool blockPopups;
+  bool darkPages; // затемнять сайты в тёмной теме
+  int textZoom; // размер текста на страницах, %
+
   BrowserSettings(
       {this.searchEngine = GoogleSearchEngine,
       this.homePageEnabled = false,
       this.customUrlHomePage = "",
       this.debuggingEnabled = false,
-      this.themeMode = 0});
+      this.themeMode = 0,
+      this.javaScriptEnabled = true,
+      this.supportZoom = true,
+      this.mediaNeedsGesture = true,
+      this.blockPopups = false,
+      this.darkPages = false,
+      this.textZoom = 100});
 
   BrowserSettings copy() {
     return BrowserSettings(
@@ -36,7 +50,13 @@ class BrowserSettings {
         homePageEnabled: homePageEnabled,
         customUrlHomePage: customUrlHomePage,
         debuggingEnabled: debuggingEnabled,
-        themeMode: themeMode);
+        themeMode: themeMode,
+        javaScriptEnabled: javaScriptEnabled,
+        supportZoom: supportZoom,
+        mediaNeedsGesture: mediaNeedsGesture,
+        blockPopups: blockPopups,
+        darkPages: darkPages,
+        textZoom: textZoom);
   }
 
   static BrowserSettings? fromMap(Map<String, dynamic>? map) {
@@ -46,7 +66,13 @@ class BrowserSettings {
             homePageEnabled: map["homePageEnabled"],
             customUrlHomePage: map["customUrlHomePage"],
             debuggingEnabled: map["debuggingEnabled"],
-            themeMode: (map["themeMode"] as int?) ?? 0)
+            themeMode: (map["themeMode"] as int?) ?? 0,
+            javaScriptEnabled: map["javaScriptEnabled"] ?? true,
+            supportZoom: map["supportZoom"] ?? true,
+            mediaNeedsGesture: map["mediaNeedsGesture"] ?? true,
+            blockPopups: map["blockPopups"] ?? false,
+            darkPages: map["darkPages"] ?? false,
+            textZoom: (map["textZoom"] as int?) ?? 100)
         : null;
   }
 
@@ -56,7 +82,13 @@ class BrowserSettings {
       "homePageEnabled": homePageEnabled,
       "customUrlHomePage": customUrlHomePage,
       "debuggingEnabled": debuggingEnabled,
-      "themeMode": themeMode
+      "themeMode": themeMode,
+      "javaScriptEnabled": javaScriptEnabled,
+      "supportZoom": supportZoom,
+      "mediaNeedsGesture": mediaNeedsGesture,
+      "blockPopups": blockPopups,
+      "darkPages": darkPages,
+      "textZoom": textZoom
     };
   }
 
@@ -99,7 +131,8 @@ class BrowserModel extends ChangeNotifier {
       return;
     }
 
-    final window = await WindowManagerPlus.createWindow(windowModel != null ? [windowModel.id] : null);
+    final window = await WindowManagerPlus.createWindow(
+        windowModel != null ? [windowModel.id] : null);
     if (window != null) {
       if (kDebugMode) {
         print("Window created: $window}");

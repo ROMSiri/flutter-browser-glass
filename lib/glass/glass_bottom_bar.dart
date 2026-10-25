@@ -231,8 +231,34 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     _stretchOf(part).release();
     final over = _partAt(e.position) == part;
     setState(() => _hot = null);
-    if (!over || _longPressed || _wasCompact) return;
+    if (_longPressed) return;
+
+    // свайп по капсуле вбок — соседняя вкладка
+    final dx = e.position.dx - _downAt.dx, dy = e.position.dy - _downAt.dy;
+    if (part == _Part.pill &&
+        !_editing &&
+        dx.abs() > 48 &&
+        dx.abs() > dy.abs() * 1.4) {
+      _switchTab(dx < 0 ? 1 : -1);
+      return;
+    }
+
+    if (!over || _wasCompact || _moved) return;
     _onTap(part, _toLocal(e.position));
+  }
+
+  /// Влево — следующая вкладка, вправо — предыдущая.
+  void _switchTab(int delta) {
+    final windowModel = Provider.of<WindowModel>(context, listen: false);
+    final count = windowModel.webViewTabs.length;
+    final index = windowModel.getCurrentTabIndex() + delta;
+    if (count < 2 || index < 0 || index >= count) {
+      HapticFeedback.lightImpact(); // дальше вкладок нет
+      return;
+    }
+    HapticFeedback.selectionClick();
+    GlassBarController.instance.reset();
+    windowModel.showTab(index);
   }
 
   void _onCancel(_Part part) {
@@ -263,10 +289,6 @@ class _GlassBottomBarState extends State<GlassBottomBar>
         final x = local.dx - _pillRect.left;
         if (x < 44) {
           showUrlInfo(); // замок — сведения о сайте
-        } else if (x > _pillRect.width - 44 && _compact.value < 0.3) {
-          Provider.of<WebViewModel>(context, listen: false)
-              .webViewController
-              ?.reload();
         } else {
           _startEditing();
         }
@@ -389,10 +411,14 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     final pcx = size.width / 2;
     final dP = _pillS.deform;
     // широкая форма тянется в пикселях, иначе разъедется
-    final pW = pw * dP.grow + dP.side * 1.1 - dP.vert * 0.5;
+    // вбок капсула тянется только в ту сторону, куда тянут:
+    // противоположный край стоит на месте
+    final pW = pw * dP.grow - dP.vert * 0.5;
+    final pullDir = dP.tx.sign;
+    final pullExt = dP.side * 1.1;
     final pH = h * dP.grow + dP.vert * 0.45 - dP.side * 0.12;
-    var pL = pcx - pW / 2 + dP.tx;
-    var pR = pcx + pW / 2 + dP.tx;
+    var pL = pcx - pW / 2 - (pullDir < 0 ? pullExt : 0);
+    var pR = pcx + pW / 2 + (pullDir > 0 ? pullExt : 0);
 
     // ---- кнопки: подъезжают к строке, затем размываются и уходят под неё ----
     final tMove = math.max(math.min(1.05, t * 1.35), e);
@@ -553,7 +579,6 @@ class _GlassBottomBarState extends State<GlassBottomBar>
     }
 
     final contentScale = lerpD(1, 0.86, tc);
-    final reloadOpacity = (1 - tc * 1.8).clamp(0.0, 1.0) * (1 - e);
 
     Widget content;
     if (_editing) {
@@ -632,16 +657,7 @@ class _GlassBottomBarState extends State<GlassBottomBar>
                 ),
               ),
             ),
-            SizedBox(
-              width: lerpD(44, 12, tc),
-              child: reloadOpacity > 0.01
-                  ? Opacity(
-                      opacity: reloadOpacity,
-                      child:
-                          Icon(Icons.refresh_rounded, size: 20, color: c.text),
-                    )
-                  : null,
-            ),
+            SizedBox(width: lerpD(18, 12, tc)),
           ],
         ),
       );

@@ -15,6 +15,7 @@ import 'glass/glass_theme.dart';
 import 'glass/start_page.dart';
 import 'long_press_alert_dialog.dart';
 import 'models/browser_model.dart';
+import 'models/page_settings.dart';
 import 'models/window_model.dart';
 
 final webViewTabStateKey = GlobalKey<_WebViewTabState>();
@@ -194,7 +195,6 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
     initialSettings.useOnDownloadStart = true;
     initialSettings.useOnLoadResource = false;
     initialSettings.useShouldOverrideUrlLoading = true;
-    initialSettings.javaScriptCanOpenWindowsAutomatically = true;
     if (Util.isIOS() || Util.isAndroid()) {
       initialSettings.userAgent =
           "Mozilla/5.0 (Linux; Android 9; LG-H870 Build/PKQ1.190522.001) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/83.0.4103.106 Mobile Safari/537.36";
@@ -207,7 +207,8 @@ class _WebViewTabState extends State<WebViewTab> with WidgetsBindingObserver {
 
     initialSettings.safeBrowsingEnabled = true;
     initialSettings.disableDefaultErrorPage = true;
-    initialSettings.supportMultipleWindows = true;
+    applyPageSettings(initialSettings, settings,
+        dark: Theme.of(context).brightness == Brightness.dark);
     initialSettings.verticalScrollbarThumbColor =
         const Color.fromRGBO(0, 0, 0, 0.5);
     initialSettings.horizontalScrollbarThumbColor =

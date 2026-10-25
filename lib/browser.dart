@@ -107,7 +107,14 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
       return Stack(
         children: [
           if (canShowTabScroller) Positioned.fill(child: GlassTabsPage()),
-          Positioned.fill(child: _buildWebViewTabs()),
+          // пока открыт экран вкладок, страница сверху не должна забирать
+          // нажатия — иначе карточки и кнопки под ней не нажимаются
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: canShowTabScroller,
+              child: _buildWebViewTabs(),
+            ),
+          ),
         ],
       );
     }

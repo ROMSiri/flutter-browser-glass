@@ -152,3 +152,174 @@ class GlassGroupTitle extends StatelessWidget {
     );
   }
 }
+
+/// Строка с переключателем.
+class GlassSwitchRow extends StatelessWidget {
+  final IconData? icon;
+  final String title;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  const GlassSwitchRow({
+    super.key,
+    this.icon,
+    required this.title,
+    this.subtitle,
+    required this.value,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassRow(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      onTap: onChanged == null ? null : () => onChanged!(!value),
+      trailing: Switch.adaptive(
+        value: value,
+        activeColor: GlassColors.active,
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+/// Строка настроек: значок, название, пояснение и что-то справа.
+class GlassRow extends StatelessWidget {
+  final IconData? icon;
+  final Color? iconColor;
+  final String title;
+  final String? subtitle;
+  final String? value; // текущее значение серым справа
+  final Widget? trailing;
+  final bool chevron; // стрелка — откроется отдельный экран
+  final bool destructive;
+  final VoidCallback? onTap;
+
+  const GlassRow({
+    super.key,
+    this.icon,
+    this.iconColor,
+    required this.title,
+    this.subtitle,
+    this.value,
+    this.trailing,
+    this.chevron = false,
+    this.destructive = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = GlassColors.of(context);
+    final titleColor = destructive ? const Color(0xFFFF3B30) : c.text;
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 52),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+          child: Row(
+            children: [
+              if (icon != null) ...[
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: (iconColor ?? GlassColors.active).withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(icon,
+                      size: 18,
+                      color: destructive
+                          ? titleColor
+                          : (iconColor ?? GlassColors.active)),
+                ),
+                const SizedBox(width: 14),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title,
+                        style: TextStyle(color: titleColor, fontSize: 15.5)),
+                    if (subtitle != null && subtitle!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(subtitle!,
+                            style: TextStyle(color: c.muted, fontSize: 12.5)),
+                      ),
+                  ],
+                ),
+              ),
+              if (value != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text(value!,
+                      style: TextStyle(color: c.muted, fontSize: 15)),
+                ),
+              if (trailing != null) trailing!,
+              if (chevron)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Icon(Icons.chevron_right_rounded,
+                      color: c.muted, size: 22),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Строка выбора одного варианта из нескольких — с галочкой.
+class GlassCheckRow extends StatelessWidget {
+  final String title;
+  final Widget? leading;
+  final bool checked;
+  final VoidCallback onTap;
+
+  const GlassCheckRow({
+    super.key,
+    required this.title,
+    this.leading,
+    required this.checked,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = GlassColors.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: 52,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              if (leading != null) ...[
+                SizedBox(width: 30, height: 30, child: Center(child: leading)),
+                const SizedBox(width: 14),
+              ],
+              Expanded(
+                child: Text(title,
+                    style: TextStyle(color: c.text, fontSize: 15.5)),
+              ),
+              AnimatedOpacity(
+                opacity: checked ? 1 : 0,
+                duration: const Duration(milliseconds: 180),
+                child: const Icon(Icons.check_rounded,
+                    color: GlassColors.active, size: 22),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

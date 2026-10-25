@@ -72,10 +72,9 @@ class _TabViewerAppBarState extends State<TabViewerAppBar> {
             constraints: const BoxConstraints(minWidth: 25.0),
             child: Center(
                 child: Text(
-                  windowModel.webViewTabs.length.toString(),
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14.0),
+              windowModel.webViewTabs.length.toString(),
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.0),
             )),
           ),
         ),

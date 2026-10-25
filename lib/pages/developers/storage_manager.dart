@@ -14,9 +14,12 @@ class StorageManager extends StatefulWidget {
 }
 
 class _StorageManagerState extends State<StorageManager> {
-  final CookieManager _cookieManager = CookieManager.instance(webViewEnvironment: webViewEnvironment);
-  final WebStorageManager? _webStorageManager = !Util.isWindows() ? WebStorageManager.instance() : null;
-  final HttpAuthCredentialDatabase? _httpAuthCredentialDatabase = !Util.isWindows() ? HttpAuthCredentialDatabase.instance() : null;
+  final CookieManager _cookieManager =
+      CookieManager.instance(webViewEnvironment: webViewEnvironment);
+  final WebStorageManager? _webStorageManager =
+      !Util.isWindows() ? WebStorageManager.instance() : null;
+  final HttpAuthCredentialDatabase? _httpAuthCredentialDatabase =
+      !Util.isWindows() ? HttpAuthCredentialDatabase.instance() : null;
 
   var cookieNameTrackingEdit = <bool>[];
   var cookieValueTrackingEdit = <bool>[];
@@ -93,8 +96,8 @@ class _StorageManagerState extends State<StorageManager> {
         ];
 
         if (!Util.isWindows()) {
-          entryItems.add(
-            _buildHttpAuthCredentialDatabaseExpansionTile(constraints));
+          entryItems
+              .add(_buildHttpAuthCredentialDatabaseExpansionTile(constraints));
         }
 
         if (Util.isAndroid()) {
@@ -162,8 +165,9 @@ class _StorageManagerState extends State<StorageManager> {
                 DataCell(IconButton(
                   icon: const Icon(Icons.cancel),
                   onPressed: () async {
-                    await _cookieManager.deleteCookie(url: url, name: cookie.name);
-                    setState(() { });
+                    await _cookieManager.deleteCookie(
+                        url: url, name: cookie.name);
+                    setState(() {});
                   },
                 ))
               ]);
@@ -289,13 +293,14 @@ class _StorageManagerState extends State<StorageManager> {
                                               : "Select a date ..."),
                                       onTap: () async {
                                         FocusScope.of(context).unfocus();
-                                        _newCookieExpiresDate = await showDatePicker(
-                                            context: context,
-                                            initialDate: _newCookieExpiresDate,
-                                            firstDate: DateTime.now(),
-                                            lastDate: DateTime(9999),
+                                        _newCookieExpiresDate =
+                                            await showDatePicker(
+                                          context: context,
+                                          initialDate: _newCookieExpiresDate,
+                                          firstDate: DateTime.now(),
+                                          lastDate: DateTime(9999),
                                         );
-                                        setState(() { });
+                                        setState(() {});
                                       },
                                     ),
                                   ),
@@ -332,7 +337,8 @@ class _StorageManagerState extends State<StorageManager> {
                                 if (_newCookieFormKey.currentState != null &&
                                     _newCookieFormKey.currentState!
                                         .validate()) {
-                                  final expiresDate = _newCookieExpiresDate?.millisecondsSinceEpoch;
+                                  final expiresDate = _newCookieExpiresDate
+                                      ?.millisecondsSinceEpoch;
 
                                   await _cookieManager.setCookie(
                                       url: url,
@@ -656,8 +662,7 @@ class _StorageManagerState extends State<StorageManager> {
           selector: (context, webViewModel) => webViewModel.url!,
           builder: (context, url, child) {
             return FutureBuilder(
-              future: _webStorageManager
-                  ?.getQuotaForOrigin(origin: url.origin),
+              future: _webStorageManager?.getQuotaForOrigin(origin: url.origin),
               builder: (context, snapshot) {
                 return Text(snapshot.hasData ? snapshot.data.toString() : "");
               },
@@ -671,8 +676,8 @@ class _StorageManagerState extends State<StorageManager> {
             return ListTile(
               title: const Text("Usage"),
               subtitle: FutureBuilder(
-                future: _webStorageManager
-                    ?.getUsageForOrigin(origin: url.origin),
+                future:
+                    _webStorageManager?.getUsageForOrigin(origin: url.origin),
                 builder: (context, snapshot) {
                   return Text(snapshot.hasData ? snapshot.data.toString() : "");
                 },
@@ -680,8 +685,7 @@ class _StorageManagerState extends State<StorageManager> {
               trailing: IconButton(
                 icon: const Icon(Icons.clear),
                 onPressed: () async {
-                  await _webStorageManager
-                      ?.deleteOrigin(origin: url.origin);
+                  await _webStorageManager?.deleteOrigin(origin: url.origin);
                   setState(() {});
                 },
               ),
@@ -703,8 +707,8 @@ class _StorageManagerState extends State<StorageManager> {
 
   Widget _buildIOSWebStorageExpansionTile(BoxConstraints constraints) {
     return FutureBuilder(
-      future: _webStorageManager
-          ?.fetchDataRecords(dataTypes: WebsiteDataType.ALL),
+      future:
+          _webStorageManager?.fetchDataRecords(dataTypes: WebsiteDataType.ALL),
       builder: (context, snapshot) {
         List<WebsiteDataRecord> dataRecords = snapshot.hasData
             ? (snapshot.data as List<WebsiteDataRecord>)
@@ -723,7 +727,8 @@ class _StorageManagerState extends State<StorageManager> {
                     style: textStyle, softWrap: true),
               ),
               onTap: () {
-                Clipboard.setData(ClipboardData(text: dataRecord.displayName ?? ''));
+                Clipboard.setData(
+                    ClipboardData(text: dataRecord.displayName ?? ''));
               },
             ),
             DataCell(

@@ -30,7 +30,8 @@ class _CertificateInfoPopupState extends State<CertificateInfoPopup> {
   @override
   Widget build(BuildContext context) {
     // окно со множеством чёрного текста — показываем в светлой теме
-    return Theme(data: GlassTheme.light(), child: Builder(builder: (_) => _build()));
+    return Theme(
+        data: GlassTheme.light(), child: Builder(builder: (_) => _build()));
   }
 
   Widget _build() {
